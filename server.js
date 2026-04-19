@@ -89,8 +89,8 @@ function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
     chess: new Chess(),
     whiteUserId: null,
     blackUserId: null,
-    assignedPlayers: new Map(),   // userId -> 'white' or 'black' (only after assignment)
-    pendingPlayers: [],           // userIds waiting for opponent
+    assignedPlayers: new Map(),
+    pendingPlayers: [],
     lastMove: null,
     createdAt: now,
     whiteTime: initialTimeSec,
@@ -98,7 +98,6 @@ function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
     initialTime: initialTimeSec,
     lastMoveTimestamp: now,
     gameOverByTime: false,
-    // Player info
     whitePlayerInfo: null,
     blackPlayerInfo: null,
   });
@@ -148,7 +147,6 @@ function buildStateResponse(game, gameId) {
     winner = turn === 'w' ? 'black' : 'white';
   }
 
-  // Count spectators: active viewers minus players
   const viewers = activeViewers.get(gameId) || new Map();
   const spectatorCount = Math.max(0, viewers.size -
     (game.whiteUserId && viewers.has(game.whiteUserId) ? 1 : 0) -
@@ -177,9 +175,8 @@ function buildStateResponse(game, gameId) {
 
 // ========== API ROUTES ==========
 
-// Create new game with optional time control
 app.post('/api/game/new', (req, res) => {
-  const { timeControl } = req.body; // in minutes, e.g., 5 or 10
+  const { timeControl } = req.body;
   let initialSec = DEFAULT_TIME_SEC;
   if (timeControl === 5) initialSec = TIME_5_MIN;
   const gameId = createNewGame(initialSec);
@@ -190,7 +187,6 @@ app.post('/api/game/new', (req, res) => {
   });
 });
 
-// Join game with user info
 app.post('/api/game/:gameId/join', (req, res) => {
   const { gameId } = req.params;
   const { userId, userInfo } = req.body;
@@ -199,11 +195,9 @@ app.post('/api/game/:gameId/join', (req, res) => {
   const game = games.get(gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
 
-  // Record viewer activity
   const viewers = activeViewers.get(gameId);
   viewers.set(userId, { lastSeen: Date.now(), userInfo });
 
-  // Already assigned?
   if (game.assignedPlayers.has(userId)) {
     return res.json({
       color: game.assignedPlayers.get(userId),
@@ -211,17 +205,14 @@ app.post('/api/game/:gameId/join', (req, res) => {
     });
   }
 
-  // Game already has two assigned players → spectator
   if (game.assignedPlayers.size >= 2) {
     return res.json({ color: 'spectator', ...buildStateResponse(game, gameId) });
   }
 
-  // Not yet assigned – add to pending if not already there
   if (!game.pendingPlayers.includes(userId)) {
     game.pendingPlayers.push(userId);
   }
 
-  // Check if we now have two pending players → assign random colors
   if (game.pendingPlayers.length >= 2) {
     const [playerA, playerB] = game.pendingPlayers;
     const whiteFirst = Math.random() < 0.5;
@@ -233,7 +224,6 @@ app.post('/api/game/:gameId/join', (req, res) => {
     game.assignedPlayers.set(whiteUser, 'white');
     game.assignedPlayers.set(blackUser, 'black');
 
-    // Store player info from their viewer records
     const whiteViewer = viewers.get(whiteUser);
     const blackViewer = viewers.get(blackUser);
     game.whitePlayerInfo = whiteViewer?.userInfo || { firstName: 'White' };
@@ -246,7 +236,6 @@ app.post('/api/game/:gameId/join', (req, res) => {
     return res.json({ color, ...buildStateResponse(game, gameId) });
   }
 
-  // Still waiting
   res.json({
     color: null,
     waitingForAssignment: true,
@@ -254,7 +243,6 @@ app.post('/api/game/:gameId/join', (req, res) => {
   });
 });
 
-// Heartbeat to keep viewer active
 app.post('/api/game/:gameId/heartbeat', (req, res) => {
   const { gameId } = req.params;
   const { userId, userInfo } = req.body;
@@ -317,7 +305,6 @@ app.post('/api/game/:gameId/move', (req, res) => {
   }
 });
 
-// Resign endpoint
 app.post('/api/game/:gameId/resign', (req, res) => {
   const { gameId } = req.params;
   const { userId } = req.body;
@@ -339,7 +326,6 @@ app.post('/api/game/:gameId/resign', (req, res) => {
     return res.status(400).json({ error: 'Game already over' });
   }
 
-  // Mark game as over with winner = opposite color
   game.gameOverByTime = true;
   const winner = playerColor === 'white' ? 'black' : 'white';
   
@@ -350,7 +336,7 @@ app.post('/api/game/:gameId/resign', (req, res) => {
   });
 });
 
-// Cleanup every minute: remove stale viewers (>30 sec) and old games
+// Cleanup
 setInterval(() => {
   const now = Date.now();
   for (const [gameId, viewers] of activeViewers.entries()) {
@@ -372,7 +358,6 @@ setInterval(() => {
 // ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
-// Inline query: offer both 5 min and 10 min games
 bot.on('inline_query', async (ctx) => {
   if (!BOT_USERNAME) {
     console.warn('Inline query received before BOT_USERNAME fetched');
@@ -427,10 +412,9 @@ bot.on('inline_query', async (ctx) => {
 
 bot.command('newgame', async (ctx) => {
   try {
-    // Check for time argument (e.g., /newgame 5 or /newgame 10)
     const messageText = ctx.message.text;
     const args = messageText.split(' ');
-    let timeMinutes = 10; // default
+    let timeMinutes = 10;
     if (args.length >= 2) {
       const parsed = parseInt(args[1]);
       if (parsed === 5 || parsed === 10) timeMinutes = parsed;
@@ -446,7 +430,6 @@ bot.command('newgame', async (ctx) => {
     const messageTextOut = `🎮 *New Chess Game · ${timeLabel}*\n\nGame ID: \`${gameId}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: ${timeLabel} each`;
 
     if (isGroup) {
-      // Group: only Mini App button
       await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -456,19 +439,12 @@ bot.command('newgame', async (ctx) => {
         }
       });
     } else {
-      // Private chat: Play Now + Game Link (public URL)
       await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{
-              text: '♟️ Play Now',
-              web_app: { url: webAppUrl }
-            }],
-            [{
-              text: '🔗 Game Link',
-              url: webAppUrl
-            }]
+            [{ text: '♟️ Play Now', web_app: { url: webAppUrl } }],
+            [{ text: '🔗 Game Link', url: webAppUrl }]
           ]
         }
       });
@@ -480,10 +456,32 @@ bot.command('newgame', async (ctx) => {
 });
 
 bot.start(async (ctx) => {
-  await ctx.reply(
-    `♟️ *Chess Bot*\n\nUse /newgame [5|10] to start a game.\nExample: /newgame 5 for a 5‑minute game.\nOr type @${BOT_USERNAME || 'me'} in any group to send an invite!`,
-    { parse_mode: 'Markdown' }
-  );
+  const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+  if (isGroup) {
+    return ctx.reply(
+      `♟️ *Chess Bot*\n\nUse /newgame to start a game in this group!`,
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  // Private chat: friendly invitation with inline share button
+  const inviteMessage = `👋 *Want to play chess with any contact from Telegram?*
+
+It's very easy to do so, click the button below or go to the chat which you want to send the invitation to, type in *@${BOT_USERNAME}* , and add a space.
+
+You can also send the invitation to a group or channel. In that case, the first person to click the 'Join' button will be your opponent.`;
+
+  await ctx.reply(inviteMessage, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [
+        [{
+          text: '📤 Send Game Invite',
+          switch_inline_query: ''  // Opens inline mode with empty query; user can then select 5/10 min
+        }]
+      ]
+    }
+  });
 });
 
 // ========== START ==========
