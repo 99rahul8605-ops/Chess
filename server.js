@@ -40,25 +40,16 @@ async function fetchBotInfo() {
 }
 
 // ========== MINI APP SHORT NAME ==========
-// Safely extract just the short name from whatever is in env.
-// Handles all these cases correctly:
-//   "appnane"                              → "appnane" ✅
-//   "http://t.me/Cheeeesssssbot/appnane"   → "appnane" ✅
-//   "https://t.me/Cheeeesssssbot/appnane"  → "appnane" ✅
-//   "t.me/Cheeeesssssbot/appnane"          → "appnane" ✅
 function extractShortName(value) {
   if (!value) return 'game';
-  // If it contains a slash, take the last segment
   const trimmed = value.trim().replace(/\/$/, '');
   const parts = trimmed.split('/');
   return parts[parts.length - 1];
 }
-
 const APP_SHORT_NAME = extractShortName(process.env.MINI_APP_SHORT_NAME);
 console.log(`🎮 Mini App short name: ${APP_SHORT_NAME}`);
 
 function getMiniAppLink(gameId) {
-  // Correct format: https://t.me/BotUsername/AppShortName?startapp=GAMEID
   return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${gameId}`;
 }
 
@@ -76,9 +67,29 @@ function createNewGame() {
     whiteUserId: null,
     blackUserId: null,
     players: new Map(),
+    lastMove: null,       // { from, to } in algebraic e.g. { from: 'e2', to: 'e4' }
     createdAt: Date.now()
   });
   return gameId;
+}
+
+// Build full game state response — used by both /join and /state
+function buildStateResponse(game) {
+  const chess = game.chess;
+  return {
+    fen: chess.fen(),
+    turn: chess.turn(),
+    lastMove: game.lastMove,
+    waitingForOpponent: !(game.whiteUserId && game.blackUserId),
+    isGameOver: chess.isGameOver(),
+    isCheckmate: chess.isCheckmate(),
+    isStalemate: chess.isStalemate(),
+    isDraw: chess.isDraw(),
+    inCheck: chess.inCheck(),
+    winner: chess.isCheckmate()
+      ? (chess.turn() === 'w' ? 'black' : 'white')
+      : null
+  };
 }
 
 // ========== API ROUTES ==========
@@ -92,18 +103,7 @@ app.post('/api/game/new', (req, res) => {
   });
 });
 
-app.get('/api/game/:gameId', (req, res) => {
-  const game = games.get(req.params.gameId);
-  if (!game) return res.status(404).json({ error: 'Game not found' });
-  res.json({
-    fen: game.chess.fen(),
-    turn: game.chess.turn(),
-    isGameOver: game.chess.isGameOver(),
-    whiteReady: !!game.whiteUserId,
-    blackReady: !!game.blackUserId
-  });
-});
-
+// JOIN — assigns color and returns full state
 app.post('/api/game/:gameId/join', (req, res) => {
   const { gameId } = req.params;
   const { userId } = req.body;
@@ -112,8 +112,9 @@ app.post('/api/game/:gameId/join', (req, res) => {
   const game = games.get(gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
 
+  // Already joined — return existing color + state
   if (game.players.has(userId)) {
-    return res.json({ color: game.players.get(userId), fen: game.chess.fen() });
+    return res.json({ color: game.players.get(userId), ...buildStateResponse(game) });
   }
 
   let assignedColor;
@@ -124,37 +125,60 @@ app.post('/api/game/:gameId/join', (req, res) => {
     assignedColor = 'black';
     game.blackUserId = userId;
   } else {
-    return res.json({ color: 'spectator', fen: game.chess.fen() });
+    assignedColor = 'spectator';
   }
 
-  game.players.set(userId, assignedColor);
-  res.json({ color: assignedColor, fen: game.chess.fen() });
+  if (assignedColor !== 'spectator') {
+    game.players.set(userId, assignedColor);
+  }
+
+  res.json({ color: assignedColor, ...buildStateResponse(game) });
 });
 
+// STATE — polled every second by frontend
+// Supports both GET /api/game/:gameId/state?userId=xxx
+// and      GET /api/game/:gameId  (legacy)
+function stateHandler(req, res) {
+  const game = games.get(req.params.gameId);
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+  res.json(buildStateResponse(game));
+}
+
+app.get('/api/game/:gameId/state', stateHandler);
+app.get('/api/game/:gameId', stateHandler);
+
+// MOVE
 app.post('/api/game/:gameId/move', (req, res) => {
   const { gameId } = req.params;
-  const { userId, move } = req.body;
-  if (!userId || !move) return res.status(400).json({ error: 'userId and move required' });
+  const { userId, from, to, promotion } = req.body;
+  if (!userId || !from || !to) return res.status(400).json({ error: 'userId, from, to required' });
 
   const game = games.get(gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
 
   const playerColor = game.players.get(userId);
-  if (!playerColor || playerColor === 'spectator') return res.status(403).json({ error: 'Not a player' });
+  if (!playerColor || playerColor === 'spectator') {
+    return res.status(403).json({ error: 'You are not a player in this game' });
+  }
 
   const currentTurn = game.chess.turn();
-  if ((currentTurn === 'w' && playerColor !== 'white') || (currentTurn === 'b' && playerColor !== 'black')) {
+  if ((currentTurn === 'w' && playerColor !== 'white') ||
+      (currentTurn === 'b' && playerColor !== 'black')) {
     return res.status(403).json({ error: 'Not your turn' });
   }
 
   if (!game.whiteUserId || !game.blackUserId) {
-    return res.status(400).json({ error: 'Waiting for opponent' });
+    return res.status(400).json({ error: 'Waiting for opponent to join' });
   }
 
   try {
-    const result = game.chess.move(move);
+    const result = game.chess.move({ from, to, promotion: promotion || 'q' });
     if (!result) return res.status(400).json({ error: 'Invalid move' });
-    res.json({ success: true, move: result, fen: game.chess.fen(), isGameOver: game.chess.isGameOver() });
+
+    // Save last move for frontend highlighting
+    game.lastMove = { from: result.from, to: result.to };
+
+    res.json({ success: true, move: result, ...buildStateResponse(game) });
   } catch (err) {
     res.status(400).json({ error: 'Invalid move: ' + err.message });
   }
@@ -171,7 +195,6 @@ setInterval(() => {
 // ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
-// Inline mode — @Cheeeesssssbot in any chat
 bot.on('inline_query', async (ctx) => {
   const gameId = createNewGame();
   await ctx.answerInlineQuery([
@@ -194,7 +217,6 @@ bot.on('inline_query', async (ctx) => {
   ], { cache_time: 0 });
 });
 
-// /newgame command
 bot.command('newgame', async (ctx) => {
   try {
     const gameId = createNewGame();
