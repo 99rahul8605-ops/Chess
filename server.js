@@ -130,6 +130,7 @@ const TIME_5_MIN = 5 * 60;             // 5 minutes
 // ========== GAME STORAGE ==========
 const games = new Map();
 const activeViewers = new Map();
+const chatMessages = new Map();         // gameId -> array of messages
 
 function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
   const gameId = uuidv4().slice(0, 8);
@@ -152,6 +153,7 @@ function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
     statsRecorded: false,
   });
   activeViewers.set(gameId, new Map());
+  chatMessages.set(gameId, []);
   return gameId;
 }
 
@@ -444,6 +446,58 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
   });
 });
 
+// ========== CHAT ENDPOINTS ==========
+app.post('/api/game/:gameId/chat', (req, res) => {
+  const { gameId } = req.params;
+  const { userId, text } = req.body;
+  if (!userId || !text || text.trim().length === 0) {
+    return res.status(400).json({ error: 'userId and text required' });
+  }
+
+  const game = games.get(gameId);
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  let color = 'spectator';
+  if (game.whiteUserId === userId) color = 'white';
+  else if (game.blackUserId === userId) color = 'black';
+
+  let name = 'Anonymous';
+  if (color === 'white' && game.whitePlayerInfo) {
+    name = game.whitePlayerInfo.firstName || 'White';
+  } else if (color === 'black' && game.blackPlayerInfo) {
+    name = game.blackPlayerInfo.firstName || 'Black';
+  } else {
+    const viewers = activeViewers.get(gameId);
+    const viewer = viewers?.get(userId);
+    if (viewer?.userInfo) name = viewer.userInfo.firstName || 'Spectator';
+  }
+
+  const timestamp = Date.now();
+  const message = {
+    userId,
+    name,
+    color,
+    text: text.trim(),
+    timestamp
+  };
+
+  const messages = chatMessages.get(gameId) || [];
+  messages.push(message);
+  if (messages.length > 100) messages.shift();
+  chatMessages.set(gameId, messages);
+
+  res.json({ success: true, message });
+});
+
+app.get('/api/game/:gameId/chat', (req, res) => {
+  const { gameId } = req.params;
+  const since = parseInt(req.query.since) || 0;
+
+  const messages = chatMessages.get(gameId) || [];
+  const newMessages = messages.filter(m => m.timestamp > since);
+  res.json({ messages: newMessages });
+});
+
 // Cleanup every minute
 setInterval(() => {
   const now = Date.now();
@@ -459,6 +513,7 @@ setInterval(() => {
     if (now - game.createdAt > 3600000) {
       games.delete(id);
       activeViewers.delete(id);
+      chatMessages.delete(id);
     }
   }
 }, 60000);
