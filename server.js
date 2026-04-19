@@ -4,10 +4,12 @@ const { Telegraf } = require('telegraf');
 const { Chess } = require('chess.js');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
+const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/chessbot';
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 BASE_URL = BASE_URL.replace(/\/$/, '');
@@ -16,6 +18,57 @@ if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_U
 }
 
 console.log(`🌐 BASE_URL: ${BASE_URL}`);
+
+// MongoDB Connection
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  firstName: String,
+  lastName: String,
+  username: String,
+  photoUrl: String,
+  stats: {
+    gamesPlayed: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    draws: { type: Number, default: 0 }
+  },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model('User', userSchema);
+
+// Helper to update user stats
+async function updateUserStats(userId, userInfo, result) {
+  if (!userId) return;
+  try {
+    let user = await User.findOne({ userId });
+    if (!user) {
+      user = new User({ userId, ...userInfo });
+    } else {
+      // Update info if changed
+      if (userInfo) {
+        user.firstName = userInfo.firstName || user.firstName;
+        user.lastName = userInfo.lastName || user.lastName;
+        user.username = userInfo.username || user.username;
+        user.photoUrl = userInfo.photoUrl || user.photoUrl;
+      }
+    }
+    user.stats.gamesPlayed += 1;
+    if (result === 'win') user.stats.wins += 1;
+    else if (result === 'loss') user.stats.losses += 1;
+    else if (result === 'draw') user.stats.draws += 1;
+    user.updatedAt = new Date();
+    await user.save();
+    console.log(`📊 Stats updated for ${userId}: ${result}`);
+  } catch (err) {
+    console.error('Error updating user stats:', err);
+  }
+}
 
 app.use(cors());
 app.use(express.json());
@@ -78,8 +131,6 @@ const TIME_5_MIN = 5 * 60;             // 5 minutes
 
 // ========== GAME STORAGE ==========
 const games = new Map();
-
-// Active viewers: gameId -> Map of userId -> { lastSeen, userInfo }
 const activeViewers = new Map();
 
 function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
@@ -100,6 +151,7 @@ function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
     gameOverByTime: false,
     whitePlayerInfo: null,
     blackPlayerInfo: null,
+    statsRecorded: false, // flag to prevent double stats update
   });
   activeViewers.set(gameId, new Map());
   return gameId;
@@ -127,6 +179,41 @@ function checkTimeOut(game) {
     return { winner: 'white', reason: 'timeout' };
   }
   return null;
+}
+
+async function recordGameResult(game) {
+  if (game.statsRecorded) return;
+  const c = chessCompat(game.chess);
+  let winner = null;
+  let isDraw = false;
+
+  const timeOutResult = checkTimeOut(game);
+  if (timeOutResult) {
+    winner = timeOutResult.winner;
+  } else if (c.isCheckmate()) {
+    winner = c.turn() === 'w' ? 'black' : 'white';
+  } else if (c.isStalemate() || c.isDraw()) {
+    isDraw = true;
+  }
+
+  if (winner || isDraw) {
+    const whiteId = game.whiteUserId;
+    const blackId = game.blackUserId;
+    const whiteInfo = game.whitePlayerInfo;
+    const blackInfo = game.blackPlayerInfo;
+
+    if (whiteId) {
+      if (isDraw) await updateUserStats(whiteId, whiteInfo, 'draw');
+      else if (winner === 'white') await updateUserStats(whiteId, whiteInfo, 'win');
+      else await updateUserStats(whiteId, whiteInfo, 'loss');
+    }
+    if (blackId) {
+      if (isDraw) await updateUserStats(blackId, blackInfo, 'draw');
+      else if (winner === 'black') await updateUserStats(blackId, blackInfo, 'win');
+      else await updateUserStats(blackId, blackInfo, 'loss');
+    }
+    game.statsRecorded = true;
+  }
 }
 
 function buildStateResponse(game, gameId) {
@@ -174,6 +261,19 @@ function buildStateResponse(game, gameId) {
 }
 
 // ========== API ROUTES ==========
+
+// Get user stats
+app.get('/api/user/:userId/stats', async (req, res) => {
+  try {
+    const user = await User.findOne({ userId: req.params.userId });
+    if (!user) {
+      return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+    }
+    res.json({ stats: user.stats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/game/new', (req, res) => {
   const { timeControl } = req.body;
@@ -299,13 +399,21 @@ app.post('/api/game/:gameId/move', (req, res) => {
 
     updateTimeAfterMove(game);
     game.lastMove = { from: result.from, to: result.to };
-    res.json({ success: true, move: result, ...buildStateResponse(game, gameId) });
+    
+    const response = { success: true, move: result, ...buildStateResponse(game, gameId) };
+    
+    // If game ended by checkmate/draw, record stats
+    if (c.isGameOver()) {
+      recordGameResult(game);
+    }
+    
+    res.json(response);
   } catch (err) {
     res.status(400).json({ error: 'Invalid move: ' + err.message });
   }
 });
 
-app.post('/api/game/:gameId/resign', (req, res) => {
+app.post('/api/game/:gameId/resign', async (req, res) => {
   const { gameId } = req.params;
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
@@ -329,6 +437,9 @@ app.post('/api/game/:gameId/resign', (req, res) => {
   game.gameOverByTime = true;
   const winner = playerColor === 'white' ? 'black' : 'white';
   
+  // Record stats
+  await recordGameResult(game);
+  
   res.json({
     success: true,
     winner,
@@ -336,7 +447,7 @@ app.post('/api/game/:gameId/resign', (req, res) => {
   });
 });
 
-// Cleanup every minute
+// Cleanup
 setInterval(() => {
   const now = Date.now();
   for (const [gameId, viewers] of activeViewers.entries()) {
@@ -439,19 +550,12 @@ bot.command('newgame', async (ctx) => {
         }
       });
     } else {
-      // Private chat: Play Now (web_app) + Game Link (Telegram Mini App deep link)
       await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{
-              text: '♟️ Play Now',
-              web_app: { url: webAppUrl }
-            }],
-            [{
-              text: '🔗 Game Link',
-              url: miniAppLink   // ✅ Uses t.me/...?startapp= link – opens inside Telegram
-            }]
+            [{ text: '♟️ Play Now', web_app: { url: webAppUrl } }],
+            [{ text: '🔗 Game Link', url: miniAppLink }]
           ]
         }
       });
@@ -471,7 +575,6 @@ bot.start(async (ctx) => {
     );
   }
 
-  // Private chat: friendly invitation with inline share button
   const inviteMessage = `👋 *Want to play chess with any contact from Telegram?*
 
 It's very easy to do so, click the button below or go to the chat which you want to send the invitation to, type in *@${BOT_USERNAME}* , and add a space.
