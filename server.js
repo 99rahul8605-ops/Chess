@@ -73,7 +73,8 @@ function getGameUrl(gameId) {
 }
 
 // ========== TIME CONTROL CONSTANTS ==========
-const INITIAL_TIME_SEC = 10 * 60; // 10 minutes per player
+const DEFAULT_TIME_SEC = 10 * 60;      // 10 minutes
+const TIME_5_MIN = 5 * 60;             // 5 minutes
 
 // ========== GAME STORAGE ==========
 const games = new Map();
@@ -81,7 +82,7 @@ const games = new Map();
 // Active viewers: gameId -> Map of userId -> { lastSeen, userInfo }
 const activeViewers = new Map();
 
-function createNewGame() {
+function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
   const gameId = uuidv4().slice(0, 8);
   const now = Date.now();
   games.set(gameId, {
@@ -92,8 +93,9 @@ function createNewGame() {
     pendingPlayers: [],           // userIds waiting for opponent
     lastMove: null,
     createdAt: now,
-    whiteTime: INITIAL_TIME_SEC,
-    blackTime: INITIAL_TIME_SEC,
+    whiteTime: initialTimeSec,
+    blackTime: initialTimeSec,
+    initialTime: initialTimeSec,
     lastMoveTimestamp: now,
     gameOverByTime: false,
     // Player info
@@ -175,8 +177,12 @@ function buildStateResponse(game, gameId) {
 
 // ========== API ROUTES ==========
 
+// Create new game with optional time control
 app.post('/api/game/new', (req, res) => {
-  const gameId = createNewGame();
+  const { timeControl } = req.body; // in minutes, e.g., 5 or 10
+  let initialSec = DEFAULT_TIME_SEC;
+  if (timeControl === 5) initialSec = TIME_5_MIN;
+  const gameId = createNewGame(initialSec);
   res.json({
     gameId,
     url: getGameUrl(gameId),
@@ -366,15 +372,19 @@ setInterval(() => {
 // ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
+// Inline query: offer both 5 min and 10 min games
 bot.on('inline_query', async (ctx) => {
   if (!BOT_USERNAME) {
     console.warn('Inline query received before BOT_USERNAME fetched');
     return await ctx.answerInlineQuery([], { cache_time: 0 });
   }
 
-  const gameId = createNewGame();
-  const miniAppLink = getMiniAppLink(gameId);
-  if (!miniAppLink) {
+  const gameId5 = createNewGame(TIME_5_MIN);
+  const gameId10 = createNewGame(DEFAULT_TIME_SEC);
+  const miniAppLink5 = getMiniAppLink(gameId5);
+  const miniAppLink10 = getMiniAppLink(gameId10);
+  
+  if (!miniAppLink5 || !miniAppLink10) {
     console.error('Failed to generate mini app link');
     return await ctx.answerInlineQuery([], { cache_time: 0 });
   }
@@ -382,17 +392,33 @@ bot.on('inline_query', async (ctx) => {
   await ctx.answerInlineQuery([
     {
       type: 'article',
-      id: gameId,
-      title: '♟️ Start a Chess Game (10 min)',
-      description: 'Send a timed chess game invite – colors assigned randomly when both join',
+      id: gameId5,
+      title: '♟️ Chess · 5 min',
+      description: 'Blitz game – 5 minutes each',
       thumbnail_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Chess_kdt45.svg/45px-Chess_kdt45.svg.png',
       input_message_content: {
-        message_text: `🎮 *Chess Game Challenge!*\n\nGame ID: \`${gameId}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time control: 10 min each\n\nTap below to play!`,
+        message_text: `🎮 *Chess · 5 min*\n\nGame ID: \`${gameId5}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 5 min each\n\nTap below to play!`,
         parse_mode: 'Markdown'
       },
       reply_markup: {
         inline_keyboard: [[
-          { text: '♟️ Play Chess', url: miniAppLink }
+          { text: '♟️ Play Chess', url: miniAppLink5 }
+        ]]
+      }
+    },
+    {
+      type: 'article',
+      id: gameId10,
+      title: '♟️ Chess · 10 min',
+      description: 'Standard game – 10 minutes each',
+      thumbnail_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Chess_kdt45.svg/45px-Chess_kdt45.svg.png',
+      input_message_content: {
+        message_text: `🎮 *Chess · 10 min*\n\nGame ID: \`${gameId10}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 10 min each\n\nTap below to play!`,
+        parse_mode: 'Markdown'
+      },
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '♟️ Play Chess', url: miniAppLink10 }
         ]]
       }
     }
@@ -401,33 +427,43 @@ bot.on('inline_query', async (ctx) => {
 
 bot.command('newgame', async (ctx) => {
   try {
-    const gameId = createNewGame();
+    // Check for time argument (e.g., /newgame 5 or /newgame 10)
+    const messageText = ctx.message.text;
+    const args = messageText.split(' ');
+    let timeMinutes = 10; // default
+    if (args.length >= 2) {
+      const parsed = parseInt(args[1]);
+      if (parsed === 5 || parsed === 10) timeMinutes = parsed;
+    }
+    const initialSec = timeMinutes === 5 ? TIME_5_MIN : DEFAULT_TIME_SEC;
+
+    const gameId = createNewGame(initialSec);
     const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
     const miniAppLink = getMiniAppLink(gameId);
     const webAppUrl = getGameUrl(gameId);
 
-    const messageText = `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 10 min each`;
+    const timeLabel = timeMinutes === 5 ? '5 min' : '10 min';
+    const messageTextOut = `🎮 *New Chess Game · ${timeLabel}*\n\nGame ID: \`${gameId}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: ${timeLabel} each`;
 
     if (isGroup) {
-      // Group: show both Mini App and browser link
-      await ctx.reply(messageText, {
+      // Group: only Mini App button
+      await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '♟️ Play Chess (Mini App)', url: miniAppLink }],
-            [{ text: '🌐 Open in Browser', url: webAppUrl }]
+            [{ text: '♟️ Play Chess', url: miniAppLink }]
           ]
         }
       });
     } else {
-      // Private chat: Share button + Play Now (no browser link)
-      await ctx.reply(messageText, {
+      // Private chat: Share button + Play Now
+      await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
             [{
               text: '📤 Share Game',
-              switch_inline_query: gameId  // Allows user to share the game invite to any chat
+              switch_inline_query: gameId
             }],
             [{
               text: '♟️ Play Now',
@@ -445,7 +481,7 @@ bot.command('newgame', async (ctx) => {
 
 bot.start(async (ctx) => {
   await ctx.reply(
-    `♟️ *Chess Bot*\n\nUse /newgame to start a game.\nOr type @${BOT_USERNAME || 'me'} in any group to send an invite!`,
+    `♟️ *Chess Bot*\n\nUse /newgame [5|10] to start a game.\nExample: /newgame 5 for a 5‑minute game.\nOr type @${BOT_USERNAME || 'me'} in any group to send an invite!`,
     { parse_mode: 'Markdown' }
   );
 });
