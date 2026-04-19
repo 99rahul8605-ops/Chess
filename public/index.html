@@ -59,8 +59,8 @@
     }
     button:hover { background: rgba(201,168,76,0.08); }
     #player-color { font-size: 0.7rem; margin-bottom: 5px; padding: 3px 10px; background: rgba(0,0,0,0.3); border-radius: 20px; }
-    .loading { text-align: center; padding: 20px; }
-    .waiting { text-align: center; padding: 20px; font-size: 1.2rem; color: #e8b44b; }
+    .loading, .error { text-align: center; padding: 20px; }
+    .error { color: #e84040; }
   </style>
 </head>
 <body>
@@ -78,13 +78,23 @@
   tg.expand();
   tg.ready();
 
+  // Get user ID – fallback if not available (e.g., opened in browser)
   const user = tg.initDataUnsafe?.user;
-  const userId = user ? user.id.toString() : `anon_${Math.random().toString(36).substr(2, 9)}`;
+  let userId = user ? user.id.toString() : null;
+  if (!userId) {
+    let storedId = localStorage.getItem('chess_anon_id');
+    if (!storedId) {
+      storedId = 'anon_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+      localStorage.setItem('chess_anon_id', storedId);
+    }
+    userId = storedId;
+    console.warn('No Telegram user, using anonymous ID:', userId);
+  }
 
   const urlParams = new URLSearchParams(window.location.search);
   const gameId = urlParams.get('game');
   if (!gameId) {
-    document.getElementById('board').innerHTML = '<div class="loading">No game specified. Please use the bot button.</div>';
+    document.getElementById('board').innerHTML = '<div class="error">No game specified. Please use the bot button.</div>';
     document.getElementById('status').textContent = 'INVALID GAME';
     throw new Error('No game ID');
   }
@@ -170,7 +180,10 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || `HTTP ${res.status}`);
+      }
       const data = await res.json();
       myColor = data.color;
       waitingForOpponent = data.waitingForOpponent;
@@ -180,8 +193,9 @@
       updateStatus(data);
       startPolling();
     } catch (err) {
-      console.error(err);
-      document.getElementById('status').textContent = 'Failed to join game. It may be full.';
+      console.error('Join error:', err);
+      document.getElementById('status').textContent = 'Failed to join game. It may be full or invalid.';
+      document.getElementById('board').innerHTML = `<div class="error">Error: ${err.message}</div>`;
     }
   }
 
@@ -229,7 +243,9 @@
         renderBoard();
         tg.HapticFeedback.notificationOccurred('error');
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   function updateStatus(data) {
