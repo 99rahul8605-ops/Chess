@@ -133,7 +133,7 @@ app.post('/api/game/:gameId/move', (req, res) => {
   }
 });
 
-// Clean up old games
+// Clean up old games (1 hour)
 setInterval(() => {
   const now = Date.now();
   for (const [id, game] of games.entries()) {
@@ -144,42 +144,70 @@ setInterval(() => {
 // ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
+// Helper to detect /newgame command (with or without @botname)
+function isNewGameCommand(text) {
+  if (!text) return false;
+  const normalized = text.toLowerCase().trim();
+  return normalized === '/newgame' || normalized.startsWith('/newgame@');
+}
+
+async function createGame(ctx) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
+    const { gameId, url } = await response.json();
+
+    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick below to join. First player gets White, second gets Black.`;
+    
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    let replyMarkup;
+    if (isGroup) {
+      // Groups: regular URL button (opens in browser)
+      replyMarkup = {
+        inline_keyboard: [[{ text: '♟️ Join Game', url }]]
+      };
+    } else {
+      // Private chat: WebApp button (opens inside Telegram)
+      replyMarkup = {
+        inline_keyboard: [[{ text: '♟️ Play Chess (in-app)', web_app: { url } }]]
+      };
+    }
+    
+    await ctx.reply(messageText, { parse_mode: 'Markdown', reply_markup: replyMarkup });
+  } catch (err) {
+    console.error('Create game error:', err);
+    ctx.reply('Sorry, could not create game. Please try again.');
+  }
+}
+
 bot.start((ctx) => {
   const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
   if (isGroup) {
     ctx.reply(
-      '♟️ *Chess Bot ready!*\nUse /newgame to create a game.\n\nFirst player to click the button gets White, second gets Black.\n\n⚠️ Make sure my privacy mode is disabled (ask group admin to set /setprivacy with @BotFather).',
+      '♟️ *Chess Bot ready!*\nSend /newgame to create a game.\n\nFirst player to click the button gets White, second gets Black.\n\n⚠️ Privacy mode must be disabled (ask admin to set /setprivacy with @BotFather).',
       { parse_mode: 'Markdown' }
     );
   } else {
     ctx.reply(
       '♟️ *Multiplayer Chess Mini App* ♞\n\n' +
       'Use /newgame to create a chess game and invite a friend.\n' +
-      'Both players click the same button – colors are assigned automatically (first joiner = White, second = Black).\n\n' +
+      'Both players click the same button – colors assigned automatically.\n\n' +
       'The game opens inside Telegram (Mini App).',
       { parse_mode: 'Markdown' }
     );
   }
 });
 
+// Handle /newgame command
 bot.command('newgame', async (ctx) => {
-  try {
-    const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
-    const { gameId, url } = await response.json();
+  await createGame(ctx);
+});
 
-    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick the button below to join. First player gets White, second gets Black.\n\n⚠️ The game opens inside Telegram (Mini App).`;
-
-    // Use web_app button for ALL chats (private and groups)
-    const replyMarkup = {
-      inline_keyboard: [
-        [{ text: '♟️ Play Chess (in-app)', web_app: { url: url } }]
-      ]
-    };
-
-    await ctx.reply(messageText, { parse_mode: 'Markdown', reply_markup: replyMarkup });
-  } catch (err) {
-    console.error(err);
-    ctx.reply('Sorry, could not create game. Please try again.');
+// Also handle text messages in groups (in case command is typed without slash or with @mention)
+bot.on('text', async (ctx) => {
+  if (!ctx.chat || !ctx.message || !ctx.message.text) return;
+  const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+  if (isGroup && isNewGameCommand(ctx.message.text)) {
+    await createGame(ctx);
   }
 });
 
@@ -187,7 +215,7 @@ bot.on('new_chat_members', (ctx) => {
   const newMember = ctx.message.new_chat_members.find(m => m.id === ctx.botInfo.id);
   if (newMember) {
     ctx.reply(
-      '👋 Hello! I am a Chess bot.\n\nUse /newgame to create a game.\n\n⚠️ Make sure my privacy mode is disabled (ask the group admin to set /setprivacy with @BotFather).',
+      '👋 Hello! I am a Chess bot.\n\nSend /newgame to create a game.\n\n⚠️ Make sure my privacy mode is disabled (ask the group admin to set /setprivacy with @BotFather).',
       { parse_mode: 'Markdown' }
     );
   }
