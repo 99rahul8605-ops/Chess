@@ -246,7 +246,7 @@
       cursor: pointer;
     }
 
-    /* ---------- CHAT PANEL CSS (from chat-only.html) ---------- */
+    /* Chat Panel */
     #chat-fab {
       position: fixed; bottom: 22px; right: 18px;
       width: 48px; height: 48px; border-radius: 50%;
@@ -277,7 +277,7 @@
       box-shadow: 0 8px 32px rgba(0,0,0,0.8);
       display: none; flex-direction: column;
       z-index: 99;
-      border-radius: 2px;
+      border-radius: 8px;
       overflow: hidden;
     }
     #chat-panel.open { display: flex; }
@@ -287,11 +287,11 @@
       padding: 7px 12px;
       border-bottom: 1px solid rgba(201,168,76,0.2);
       font-size: 0.63rem; letter-spacing: 3px;
-      color: rgba(201,168,76,0.6);
+      color: #c9a84c;
     }
     #chat-close {
       background: none; border: none; cursor: pointer;
-      color: rgba(201,168,76,0.5); font-size: 1rem; padding: 0 2px;
+      color: rgba(201,168,76,0.7); font-size: 1rem; padding: 0 2px;
       line-height: 1;
     }
     #chat-close:hover { color: #c9a84c; }
@@ -305,31 +305,39 @@
     #chat-messages::-webkit-scrollbar { width: 3px; }
     #chat-messages::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); }
 
-    .chat-msg { font-size: 0.7rem; line-height: 1.45; word-break: break-word; }
-    .chat-msg .msg-name { font-size: 0.62rem; letter-spacing: 1px; margin-right: 5px; }
+    .chat-msg { 
+      font-size: 0.7rem; line-height: 1.45; word-break: break-word; 
+      color: #ddd;
+    }
+    .chat-msg .msg-name { 
+      font-size: 0.62rem; letter-spacing: 1px; margin-right: 5px; 
+      font-weight: bold;
+    }
     .chat-msg.white    .msg-name { color: #f0d9b5; }
     .chat-msg.black    .msg-name { color: #b58863; }
-    .chat-msg.spectator .msg-name { color: #888; }
+    .chat-msg.spectator .msg-name { color: #aaa; }
     .chat-msg.system {
-      color: rgba(201,168,76,0.4); font-style: italic;
+      color: #c9a84c; font-style: italic;
       font-size: 0.63rem; text-align: center;
     }
-    .chat-msg .msg-text { color: var(--tg-theme-text-color, #c9a84c); }
+    .chat-msg .msg-text { 
+      color: #eee;
+    }
 
     #chat-input-row { display: flex; border-top: 1px solid rgba(201,168,76,0.2); }
     #chat-input {
       flex: 1; background: transparent; border: none; outline: none;
       font-family: Georgia, serif; font-size: 0.72rem;
-      color: var(--tg-theme-text-color, #c9a84c);
+      color: #eee;
       padding: 9px 10px; letter-spacing: 1px;
     }
-    #chat-input::placeholder { color: rgba(201,168,76,0.3); }
+    #chat-input::placeholder { color: rgba(201,168,76,0.5); }
     #chat-send {
       border: none; border-left: 1px solid rgba(201,168,76,0.2);
       background: transparent; color: #c9a84c;
       padding: 0 14px; cursor: pointer; font-size: 1rem;
     }
-    #chat-send:hover { background: rgba(201,168,76,0.08); }
+    #chat-send:hover { background: rgba(201,168,76,0.1); }
   </style>
 </head>
 <body>
@@ -401,7 +409,7 @@
   </div>
 </div>
 
-<!-- ---------- CHAT UI (from chat-only.html) ---------- -->
+<!-- Chat UI -->
 <button id="chat-fab" onclick="toggleChat()">
   💬
   <span id="chat-badge"></span>
@@ -971,10 +979,10 @@
   function startPolling() { 
     if(updateInterval) clearInterval(updateInterval); 
     updateInterval = setInterval(fetchGameState, 1000);
-    startChatPolling(); // <-- Start chat polling
+    startChatPolling();
   }
 
-  // ---------- CHAT JAVASCRIPT (from chat-only.html) ----------
+  // ---------- CHAT JAVASCRIPT ----------
   let lastChatTimestamp = 0;
   let chatInterval = null;
   let unreadCount = 0;
@@ -1011,15 +1019,6 @@
     div.className = `chat-msg ${msg.color || 'spectator'}`;
     div.innerHTML = `<span class="msg-name">${escapeHtml(msg.name)}:</span>`
                   + `<span class="msg-text">${escapeHtml(msg.text)}</span>`;
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function appendSystemMessage(text) {
-    const box = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = 'chat-msg system';
-    div.textContent = text;
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
   }
@@ -1074,7 +1073,6 @@
     chatInterval = setInterval(pollChat, 1500);
   }
 
-  // Expose toggleChat for onclick
   window.toggleChat = toggleChat;
   window.sendChatMessage = sendChatMessage;
 
