@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Force HTTPS for Telegram WebApp (unless localhost for testing)
+// Force HTTPS for Telegram WebApp (except localhost for testing)
 if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_URL.includes('127.0.0.1')) {
   BASE_URL = BASE_URL.replace('http://', 'https://');
 }
@@ -20,14 +20,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Game storage: gameId -> { chess, whiteUserId, blackUserId, clients: Map, createdAt }
-const games = new Map();
+// Game storage
+const games = new Map(); // gameId -> { chess, whiteUserId, blackUserId, clients: Map, createdAt }
 
 function getGameUrl(gameId) {
   return `${BASE_URL}/?game=${gameId}`;
 }
 
-// API Routes
+// ========== API ROUTES ==========
 
 app.post('/api/game/new', (req, res) => {
   const gameId = uuidv4().slice(0, 8);
@@ -36,7 +36,7 @@ app.post('/api/game/new', (req, res) => {
     chess,
     whiteUserId: null,
     blackUserId: null,
-    clients: new Map(), // telegramUserId -> color
+    clients: new Map(),
     createdAt: Date.now()
   });
   res.json({ gameId, url: getGameUrl(gameId) });
@@ -50,7 +50,6 @@ app.post('/api/game/:gameId/join', (req, res) => {
 
   let assignedColor = game.clients.get(userId);
   if (!assignedColor) {
-    // Assign colors in order of joining
     if (!game.whiteUserId) {
       assignedColor = 'white';
       game.whiteUserId = userId;
@@ -134,7 +133,7 @@ app.post('/api/game/:gameId/move', (req, res) => {
   }
 });
 
-// Cleanup old games
+// Clean up old games (1 hour)
 setInterval(() => {
   const now = Date.now();
   for (const [id, game] of games.entries()) {
@@ -142,17 +141,25 @@ setInterval(() => {
   }
 }, 600000);
 
-// Telegram Bot
+// ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
 bot.start((ctx) => {
-  ctx.reply(
-    '♟️ *Multiplayer Chess Mini App* ♞\n\n' +
-    'Use /newgame to create a chess game and invite a friend.\n' +
-    'Both players click the same button – colors are assigned automatically (first joiner = White, second = Black).\n\n' +
-    'The game opens inside Telegram.',
-    { parse_mode: 'Markdown' }
-  );
+  const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+  if (isGroup) {
+    ctx.reply(
+      '♟️ *Chess Bot ready!*\nUse /newgame to create a game.\n\nFirst player to click the button gets White, second gets Black.\n\n⚠️ Make sure my privacy mode is disabled (ask group admin to set /setprivacy with @BotFather).',
+      { parse_mode: 'Markdown' }
+    );
+  } else {
+    ctx.reply(
+      '♟️ *Multiplayer Chess Mini App* ♞\n\n' +
+      'Use /newgame to create a chess game and invite a friend.\n' +
+      'Both players click the same button – colors are assigned automatically (first joiner = White, second = Black).\n\n' +
+      'You can also add me to a group and use /newgame there.',
+      { parse_mode: 'Markdown' }
+    );
+  }
 });
 
 bot.command('newgame', async (ctx) => {
@@ -160,16 +167,13 @@ bot.command('newgame', async (ctx) => {
     const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
     const { gameId, url } = await response.json();
 
-    await ctx.reply(
-      `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nShare this button with your friend:`,
-      { parse_mode: 'Markdown' }
-    );
+    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick the button below to join. First player gets White, second gets Black.`;
 
-    await ctx.reply('♟️ **Click to join the game** (colors assigned randomly by join order):', {
+    await ctx.reply(messageText, {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🎲 Join Chess Game', web_app: { url } }]
+          [{ text: '♟️ Join Chess Game', web_app: { url } }]
         ]
       }
     });
@@ -179,9 +183,21 @@ bot.command('newgame', async (ctx) => {
   }
 });
 
+// Welcome message when bot joins a group
+bot.on('new_chat_members', (ctx) => {
+  const newMember = ctx.message.new_chat_members.find(m => m.id === ctx.botInfo.id);
+  if (newMember) {
+    ctx.reply(
+      '👋 Hello! I am a Chess bot.\n\nUse /newgame to create a game.\n\n⚠️ Make sure my privacy mode is disabled (ask the group admin to set /setprivacy with @BotFather).',
+      { parse_mode: 'Markdown' }
+    );
+  }
+});
+
 bot.launch();
 console.log(`Bot started. Mini App URL: ${BASE_URL}`);
 
+// ========== SERVER ==========
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
