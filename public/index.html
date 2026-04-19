@@ -16,7 +16,6 @@
     }
     h2 { font-size: 1.3rem; letter-spacing: 5px; margin-bottom: 5px; }
 
-    /* Player panels & spectator */
     .players-container {
       display: flex;
       justify-content: space-between;
@@ -34,6 +33,7 @@
       border-radius: 30px;
       border: 1px solid var(--tg-theme-button-color, #4a3010);
       flex: 1;
+      cursor: pointer;
     }
     .player-avatar {
       width: 32px;
@@ -79,7 +79,6 @@
       gap: 4px;
     }
 
-    /* Clocks */
     #clocks {
       display: flex;
       justify-content: space-between;
@@ -143,7 +142,6 @@
     .in-check     { background: rgba(210,20,20,0.7) !important; }
     .cell svg { width: 88%; height: 88%; display: block; }
 
-    /* Move hints */
     .move-dot::after {
       content: '';
       position: absolute;
@@ -161,7 +159,6 @@
       box-shadow: inset 0 0 0 3.5px #4CAF50 !important;
     }
 
-    /* Waiting overlay */
     #waiting-overlay {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -198,14 +195,61 @@
       border-color: #a04040;
       color: #e0a0a0;
     }
-    .loading, .error { text-align: center; padding: 20px; }
-    .error { color: #e84040; }
+
+    /* Stats Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-content {
+      background: var(--tg-theme-bg-color, #2a1e0f);
+      border: 2px solid var(--tg-theme-button-color, #c9a84c);
+      border-radius: 16px;
+      padding: 20px;
+      max-width: 300px;
+      width: 90%;
+      text-align: center;
+    }
+    .modal-content h3 { margin-bottom: 15px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 15px 0;
+    }
+    .stat-item {
+      background: rgba(0,0,0,0.3);
+      padding: 8px;
+      border-radius: 8px;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #c9a84c;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      opacity: 0.8;
+    }
+    .close-btn {
+      margin-top: 10px;
+      padding: 8px 20px;
+      background: var(--tg-theme-button-color, #5a3c10);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
 <h2>♜ CHESS ♞</h2>
 
-<!-- Player info + spectator count -->
 <div class="players-container">
   <div class="player-card" id="white-player-card">
     <div class="player-avatar" id="white-avatar">♔</div>
@@ -226,7 +270,6 @@
   </div>
 </div>
 
-<!-- Clocks -->
 <div id="clocks">
   <div id="white-clock" class="clock">10:00</div>
   <div id="black-clock" class="clock">10:00</div>
@@ -247,6 +290,32 @@
   <button onclick="newGame()">⟳ NEW GAME</button>
 </div>
 
+<!-- Stats Modal -->
+<div id="stats-modal" class="modal">
+  <div class="modal-content">
+    <h3 id="modal-player-name">Player Stats</h3>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-value" id="stat-games">0</div>
+        <div class="stat-label">Games</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-wins">0</div>
+        <div class="stat-label">Wins</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-losses">0</div>
+        <div class="stat-label">Losses</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-draws">0</div>
+        <div class="stat-label">Draws</div>
+      </div>
+    </div>
+    <button class="close-btn" onclick="closeStatsModal()">Close</button>
+  </div>
+</div>
+
 <script>
   const tg = window.Telegram.WebApp;
   tg.expand();
@@ -262,7 +331,6 @@
       localStorage.setItem('chess_anon_id', storedId);
     }
     userId = storedId;
-    console.warn('No Telegram user, using anonymous ID:', userId);
   }
 
   function getUserInfo() {
@@ -279,19 +347,16 @@
   }
   const userInfo = getUserInfo();
 
-  // Game ID from start_param or URL
   const startParam = tg.initDataUnsafe?.start_param;
   const urlParams = new URLSearchParams(window.location.search);
   let gameId = startParam || urlParams.get('game');
 
-  // If no gameId, create a new one immediately
   async function ensureGameId() {
     if (!gameId) {
       try {
         const res = await fetch('/api/game/new', { method: 'POST' });
         const data = await res.json();
         gameId = data.gameId;
-        // Update URL without reload
         const url = new URL(window.location);
         url.searchParams.set('game', gameId);
         window.history.replaceState({}, '', url);
@@ -303,7 +368,7 @@
   }
 
   // --- State ---
-  let myColor = null;               // 'white', 'black', 'spectator', or null (waiting)
+  let myColor = null;
   let selectedSquare = null;
   let possibleMoves = [];
   let boardState = null;
@@ -312,43 +377,63 @@
   let waitingForOpponent = true;
   let currentTurn = 'w';
   let gameOver = false;
+  let whiteUserId = null, blackUserId = null;
 
-  // Time
-  let whiteTime = 600;
-  let blackTime = 600;
+  let whiteTime = 600, blackTime = 600;
   let localTimerInterval = null;
 
-  // UI elements
-  const boardWrap = document.getElementById('board-wrap');
   const boardEl = document.getElementById('board');
   const waitingOverlay = document.getElementById('waiting-overlay');
 
-  // --- Helper: update player displays & spectator count ---
+  // --- Stats Modal ---
+  function showStatsModal(userId, playerName) {
+    fetch(`/api/user/${userId}/stats`)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('modal-player-name').textContent = playerName;
+        document.getElementById('stat-games').textContent = data.stats.gamesPlayed;
+        document.getElementById('stat-wins').textContent = data.stats.wins;
+        document.getElementById('stat-losses').textContent = data.stats.losses;
+        document.getElementById('stat-draws').textContent = data.stats.draws;
+        document.getElementById('stats-modal').style.display = 'flex';
+      })
+      .catch(err => console.error('Stats error:', err));
+  }
+
+  window.closeStatsModal = function() {
+    document.getElementById('stats-modal').style.display = 'none';
+  };
+
+  // Attach click listeners to avatars
+  document.getElementById('white-player-card').addEventListener('click', () => {
+    if (whiteUserId) showStatsModal(whiteUserId, document.getElementById('white-name').textContent);
+  });
+  document.getElementById('black-player-card').addEventListener('click', () => {
+    if (blackUserId) showStatsModal(blackUserId, document.getElementById('black-name').textContent);
+  });
+
+  // --- Player Display Update ---
   function updatePlayerDisplays(data) {
-    const white = data.whitePlayer || { firstName: 'White' };
+    const white = data.whitePlayer || { firstName: 'White', id: data.whiteUserId };
     document.getElementById('white-name').textContent = white.firstName || 'White';
     const whiteAvatar = document.getElementById('white-avatar');
-    whiteAvatar.innerHTML = white.photoUrl
-      ? `<img src="${white.photoUrl}" alt="W">`
-      : (white.firstName?.charAt(0) || 'W');
+    whiteAvatar.innerHTML = white.photoUrl ? `<img src="${white.photoUrl}" alt="W">` : (white.firstName?.charAt(0) || 'W');
 
-    const black = data.blackPlayer || { firstName: 'Black' };
+    const black = data.blackPlayer || { firstName: 'Black', id: data.blackUserId };
     document.getElementById('black-name').textContent = black.firstName || 'Black';
     const blackAvatar = document.getElementById('black-avatar');
-    blackAvatar.innerHTML = black.photoUrl
-      ? `<img src="${black.photoUrl}" alt="B">`
-      : (black.firstName?.charAt(0) || 'B');
+    blackAvatar.innerHTML = black.photoUrl ? `<img src="${black.photoUrl}" alt="B">` : (black.firstName?.charAt(0) || 'B');
 
     document.getElementById('spec-count').textContent = data.spectatorCount || 0;
+    whiteUserId = data.whiteUserId;
+    blackUserId = data.blackUserId;
   }
 
-  // Toggle waiting overlay based on assignment status
   function toggleWaitingOverlay(isWaiting) {
     waitingOverlay.style.display = isWaiting ? 'flex' : 'none';
-    // Also disable board interaction via CSS if needed, but overlay catches clicks.
   }
 
-  // --- Heartbeat ---
+  // Heartbeat
   setInterval(() => {
     if (gameId) {
       fetch(`/api/game/${gameId}/heartbeat`, {
@@ -407,7 +492,7 @@
     return `<svg viewBox="0 0 45 45" xmlns="http://www.w3.org/2000/svg">${s[type] || ''}</svg>`;
   }
 
-  // Coordinate helpers
+  // Coordinate helpers, move generation (identical to previous version)
   function internalToDisplay(row, col) {
     if (myColor === 'black') return { row: 7 - row, col: 7 - col };
     return { row, col };
@@ -434,7 +519,7 @@
     return files[col] + ranks[row];
   }
 
-  // --- Move generation with check validation (unchanged) ---
+  // --- Move generation with check validation (identical to previous) ---
   function isWhitePiece(p) { return p && p === p.toUpperCase() && p !== p.toLowerCase(); }
   function isBlackPiece(p) { return p && p === p.toLowerCase() && p !== p.toUpperCase(); }
   function getPieceColor(p) { if (!p) return null; return isWhitePiece(p) ? 'white' : 'black'; }
@@ -580,7 +665,7 @@
     updateClockDisplay();
   }
 
-  // --- API & game flow ---
+  // --- API & Game Flow ---
   async function joinGame() {
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
@@ -598,10 +683,7 @@
       gameOver = data.isGameOver || false;
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
-      
-      // Show/hide waiting overlay
       toggleWaitingOverlay(waitingForOpponent);
-      
       renderBoard();
       updateStatus(data);
       startLocalTimer();
@@ -624,7 +706,6 @@
       gameOver = data.isGameOver || false;
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
-      
       const newBoard = fenToBoard(data.fen);
       if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
@@ -633,16 +714,10 @@
         renderBoard();
       }
       updateStatus(data);
-      
-      // Toggle overlay if waiting status changed
       if (wasWaiting !== waitingForOpponent) {
         toggleWaitingOverlay(waitingForOpponent);
-        if (!waitingForOpponent) {
-          // Game started, ensure board is rendered
-          renderBoard();
-        }
+        if (!waitingForOpponent) renderBoard();
       }
-      
       if (gameOver) { clearInterval(localTimerInterval); clearInterval(updateInterval); }
     } catch (err) {}
   }
@@ -704,7 +779,6 @@
     try {
       const res = await fetch('/api/game/new', { method: 'POST' });
       const data = await res.json();
-      // Redirect to new game URL
       window.location.href = `/?game=${data.gameId}`;
     } catch (err) {
       alert('Could not create new game.');
@@ -779,7 +853,6 @@
 
   function startPolling() { if(updateInterval)clearInterval(updateInterval); updateInterval=setInterval(fetchGameState,1000); }
 
-  // Start everything
   (async () => {
     await ensureGameId();
     joinGame();
