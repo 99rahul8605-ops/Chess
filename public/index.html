@@ -45,6 +45,25 @@
     .last-move-hi { background: rgba(140,190,0,0.5) !important; }
     .in-check     { background: rgba(210,20,20,0.7) !important; }
     .cell svg { width: 88%; height: 88%; display: block; }
+
+    /* Move hint styles */
+    .move-dot::after {
+      content: '';
+      position: absolute;
+      width: 22%;
+      height: 22%;
+      background: #4CAF50;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.85;
+      pointer-events: none;
+    }
+    .capture-highlight {
+      box-shadow: inset 0 0 0 3.5px #4CAF50 !important;
+    }
+
     #controls {
       margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
     }
@@ -91,8 +110,7 @@
     console.warn('No Telegram user, using anonymous ID:', userId);
   }
 
-  // ✅ FIX: Read gameId from Telegram start_param (Mini App via startapp=)
-  // OR fallback to ?game= URL param (browser direct link)
+  // Read gameId from Telegram start_param or URL ?game=
   const startParam = tg.initDataUnsafe?.start_param;
   const urlParams = new URLSearchParams(window.location.search);
   const gameId = startParam || urlParams.get('game');
@@ -106,11 +124,13 @@
   }
 
   let myColor = null;
-  let selectedSquare = null; // stored as internal coordinates (White perspective)
-  let boardState = null;     // internal board (White perspective)
-  let lastMove = null;       // { from, to } in algebraic
+  let selectedSquare = null;          // internal coordinates {row, col} (White perspective)
+  let possibleMoves = [];             // array of {toRow, toCol, isCapture}
+  let boardState = null;              // internal board (White perspective)
+  let lastMove = null;               // { from, to } in algebraic
   let updateInterval = null;
   let waitingForOpponent = true;
+  let currentTurn = 'w';             // 'w' or 'b' from latest game state
 
   // --- Piece SVG (unchanged) ---
   function mkPiece(type, isWhite) {
@@ -160,7 +180,7 @@
     return `<svg viewBox="0 0 45 45" xmlns="http://www.w3.org/2000/svg">${s[type] || ''}</svg>`;
   }
 
-  // Convert internal (White perspective) coordinates to display coordinates
+  // Convert internal (White perspective) to display coordinates
   function internalToDisplay(row, col) {
     if (myColor === 'black') {
       return { row: 7 - row, col: 7 - col };
@@ -195,6 +215,126 @@
     return files[col] + ranks[row];
   }
 
+  // ---------- Move Generation (basic) ----------
+  function isWhitePiece(piece) {
+    return piece && piece === piece.toUpperCase() && piece !== piece.toLowerCase();
+  }
+
+  function isBlackPiece(piece) {
+    return piece && piece === piece.toLowerCase() && piece !== piece.toUpperCase();
+  }
+
+  function getPieceColor(piece) {
+    if (!piece) return null;
+    return isWhitePiece(piece) ? 'white' : 'black';
+  }
+
+  // Generate all pseudo-legal moves for a piece at (row, col)
+  function getMovesFromSquare(row, col) {
+    const piece = boardState[row][col];
+    if (!piece) return [];
+    const pieceType = piece.toUpperCase();
+    const pieceColor = getPieceColor(piece);
+    const moves = [];
+
+    function addMoveIfValid(toRow, toCol) {
+      if (toRow < 0 || toRow > 7 || toCol < 0 || toCol > 7) return false;
+      const target = boardState[toRow][toCol];
+      if (target) {
+        if (getPieceColor(target) === pieceColor) return false; // can't capture own
+        moves.push({ toRow, toCol, isCapture: true });
+        return false; // blocked by opponent piece
+      } else {
+        moves.push({ toRow, toCol, isCapture: false });
+        return true; // continue sliding
+      }
+    }
+
+    // Pawn
+    if (pieceType === 'P') {
+      const direction = pieceColor === 'white' ? -1 : 1;
+      const startRow = pieceColor === 'white' ? 6 : 1;
+      // forward 1
+      const oneStepRow = row + direction;
+      if (oneStepRow >= 0 && oneStepRow < 8 && !boardState[oneStepRow][col]) {
+        moves.push({ toRow: oneStepRow, toCol: col, isCapture: false });
+        // forward 2 from start
+        if (row === startRow) {
+          const twoStepRow = row + 2 * direction;
+          if (!boardState[twoStepRow][col]) {
+            moves.push({ toRow: twoStepRow, toCol: col, isCapture: false });
+          }
+        }
+      }
+      // captures
+      for (let dc of [-1, 1]) {
+        const capRow = row + direction;
+        const capCol = col + dc;
+        if (capRow >= 0 && capRow < 8 && capCol >= 0 && capCol < 8) {
+          const target = boardState[capRow][capCol];
+          if (target && getPieceColor(target) !== pieceColor) {
+            moves.push({ toRow: capRow, toCol: capCol, isCapture: true });
+          }
+        }
+      }
+      // en passant skipped (backend validates)
+    }
+    // Knight
+    else if (pieceType === 'N') {
+      const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+      for (let [dr, dc] of knightMoves) {
+        const nr = row + dr, nc = col + dc;
+        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+          const target = boardState[nr][nc];
+          if (!target) moves.push({ toRow: nr, toCol: nc, isCapture: false });
+          else if (getPieceColor(target) !== pieceColor) moves.push({ toRow: nr, toCol: nc, isCapture: true });
+        }
+      }
+    }
+    // Bishop, Rook, Queen
+    else if (pieceType === 'B' || pieceType === 'R' || pieceType === 'Q') {
+      const directions = [];
+      if (pieceType === 'B' || pieceType === 'Q') {
+        directions.push([-1,-1], [-1,1], [1,-1], [1,1]);
+      }
+      if (pieceType === 'R' || pieceType === 'Q') {
+        directions.push([-1,0], [1,0], [0,-1], [0,1]);
+      }
+      for (let [dr, dc] of directions) {
+        let r = row + dr, c = col + dc;
+        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+          const target = boardState[r][c];
+          if (!target) {
+            moves.push({ toRow: r, toCol: c, isCapture: false });
+            r += dr; c += dc;
+          } else {
+            if (getPieceColor(target) !== pieceColor) {
+              moves.push({ toRow: r, toCol: c, isCapture: true });
+            }
+            break;
+          }
+        }
+      }
+    }
+    // King
+    else if (pieceType === 'K') {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = row + dr, nc = col + dc;
+          if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            const target = boardState[nr][nc];
+            if (!target) moves.push({ toRow: nr, toCol: nc, isCapture: false });
+            else if (getPieceColor(target) !== pieceColor) moves.push({ toRow: nr, toCol: nc, isCapture: true });
+          }
+        }
+      }
+      // castling skipped (backend validates)
+    }
+    return moves;
+  }
+
+  // ---------- Game logic ----------
   async function joinGame() {
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
@@ -211,6 +351,7 @@
       waitingForOpponent = data.waitingForOpponent;
       document.getElementById('player-color').innerHTML = `You are: ${myColor.toUpperCase()}`;
       boardState = fenToBoard(data.fen);
+      currentTurn = data.turn;
       renderBoard();
       updateStatus(data);
       startPolling();
@@ -227,10 +368,14 @@
       if (!res.ok) throw new Error();
       const data = await res.json();
       waitingForOpponent = data.waitingForOpponent;
+      currentTurn = data.turn;
       const newBoard = fenToBoard(data.fen);
       if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
         lastMove = data.lastMove;
+        // Clear selection if board changed (e.g., opponent moved)
+        selectedSquare = null;
+        possibleMoves = [];
         renderBoard();
       }
       updateStatus(data);
@@ -254,14 +399,17 @@
       if (res.ok && data.success) {
         boardState = fenToBoard(data.fen);
         lastMove = { from, to };
+        currentTurn = data.turn;
+        selectedSquare = null;
+        possibleMoves = [];
         renderBoard();
         updateStatus(data);
-        selectedSquare = null;
         tg.HapticFeedback.impactOccurred('light');
       } else {
         document.getElementById('status').textContent = `Invalid: ${data.error || 'move'}`;
         setTimeout(() => fetchGameState(), 1000);
         selectedSquare = null;
+        possibleMoves = [];
         renderBoard();
         tg.HapticFeedback.notificationOccurred('error');
       }
@@ -305,7 +453,7 @@
     }
   }
 
-  // Render board from White perspective, but flipped for Black player
+  // Render board from White perspective, flipped for Black player
   function renderBoard() {
     const boardEl = document.getElementById('board');
     boardEl.innerHTML = '';
@@ -318,7 +466,7 @@
         const cell = document.createElement('div');
         cell.className = `cell ${((displayRow + displayCol) % 2 === 0) ? 'light' : 'dark'}`;
 
-        // Highlight last move (convert lastMove algebraic to internal, then to display)
+        // Highlight last move
         if (lastMove) {
           const lastFromInternal = {
             row: 8 - parseInt(lastMove.from[1]),
@@ -336,11 +484,21 @@
           }
         }
 
-        // Highlight selected square (selected is stored in internal coordinates)
+        // Highlight selected square
         if (selectedSquare) {
           const selectedDisplay = internalToDisplay(selectedSquare.row, selectedSquare.col);
           if (displayRow === selectedDisplay.row && displayCol === selectedDisplay.col) {
             cell.classList.add('selected');
+          }
+        }
+
+        // Highlight possible moves
+        const move = possibleMoves.find(m => m.toRow === internal.row && m.toCol === internal.col);
+        if (move) {
+          if (move.isCapture) {
+            cell.classList.add('capture-highlight');
+          } else {
+            cell.classList.add('move-dot');
           }
         }
 
@@ -349,7 +507,6 @@
           cell.innerHTML = mkPiece(piece.toUpperCase(), isWhite);
         }
 
-        // Store internal coordinates in closure for click handler
         cell.onclick = (() => {
           const intCoord = internal;
           return () => onCellClick(intCoord.row, intCoord.col);
@@ -366,19 +523,52 @@
       document.getElementById('status').textContent = 'Waiting for opponent...';
       return;
     }
+
+    const myTurn = (myColor === 'white' && currentTurn === 'w') || (myColor === 'black' && currentTurn === 'b');
+    if (!myTurn) {
+      tg.HapticFeedback.notificationOccurred('warning');
+      document.getElementById('status').textContent = "Not your turn";
+      return;
+    }
+
     const piece = boardState[internalRow][internalCol];
-    if (selectedSquare === null) {
-      if (piece) {
-        const pieceIsWhite = piece === piece.toUpperCase() && piece !== piece.toLowerCase();
-        const myColorIsWhite = myColor === 'white';
-        if ((myColorIsWhite && pieceIsWhite) || (!myColorIsWhite && !pieceIsWhite)) {
-          selectedSquare = { row: internalRow, col: internalCol };
-          renderBoard();
-          tg.HapticFeedback.selectionChanged();
+
+    // If a square is selected
+    if (selectedSquare !== null) {
+      // Check if clicked square is a valid move
+      const move = possibleMoves.find(m => m.toRow === internalRow && m.toCol === internalCol);
+      if (move) {
+        makeMove(selectedSquare, { row: internalRow, col: internalCol });
+        return;
+      } else {
+        // Clicked elsewhere: deselect
+        selectedSquare = null;
+        possibleMoves = [];
+        renderBoard();
+        // If clicked on own piece, select it (handled below)
+        if (piece) {
+          const pieceColor = getPieceColor(piece);
+          if ((myColor === 'white' && pieceColor === 'white') || (myColor === 'black' && pieceColor === 'black')) {
+            selectedSquare = { row: internalRow, col: internalCol };
+            possibleMoves = getMovesFromSquare(internalRow, internalCol);
+            renderBoard();
+            tg.HapticFeedback.selectionChanged();
+          }
         }
       }
     } else {
-      makeMove(selectedSquare, { row: internalRow, col: internalCol });
+      // No selection: try to select a piece
+      if (piece) {
+        const pieceColor = getPieceColor(piece);
+        if ((myColor === 'white' && pieceColor === 'white') || (myColor === 'black' && pieceColor === 'black')) {
+          selectedSquare = { row: internalRow, col: internalCol };
+          possibleMoves = getMovesFromSquare(internalRow, internalCol);
+          renderBoard();
+          tg.HapticFeedback.selectionChanged();
+        } else {
+          tg.HapticFeedback.notificationOccurred('error');
+        }
+      }
     }
   }
 
