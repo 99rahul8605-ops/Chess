@@ -420,14 +420,19 @@ bot.command('newgame', async (ctx) => {
         }
       });
     } else {
-      // Private chat: show invite and share options, no browser link
-      const inviteLink = `https://t.me/${BOT_USERNAME}?start=invite_${gameId}`;
+      // Private chat: Share button + Play Now (no browser link)
       await ctx.reply(messageText, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '👥 Invite Friend', url: inviteLink }],
-            [{ text: '♟️ Play Now', web_app: { url: webAppUrl } }]
+            [{
+              text: '📤 Share Game',
+              switch_inline_query: gameId  // Allows user to share the game invite to any chat
+            }],
+            [{
+              text: '♟️ Play Now',
+              web_app: { url: webAppUrl }
+            }]
           ]
         }
       });
