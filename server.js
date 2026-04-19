@@ -61,13 +61,15 @@ app.post('/api/game/:gameId/join', (req, res) => {
     game.clients.set(userId, assignedColor);
   }
 
+  // Use correct chess.js methods
+  const chess = game.chess;
   res.json({
     color: assignedColor,
-    fen: game.chess.fen(),
-    turn: game.chess.turn(),
-    isGameOver: game.chess.isGameOver(),
-    winner: game.chess.isCheckmate() ? (game.chess.turn() === 'w' ? 'black' : 'white') : null,
-    inCheck: game.chess.inCheck(),
+    fen: chess.fen(),
+    turn: chess.turn(),
+    isGameOver: chess.game_over(),
+    winner: chess.in_checkmate() ? (chess.turn() === 'w' ? 'black' : 'white') : null,
+    inCheck: chess.in_check(),
     waitingForOpponent: !game.whiteUserId || !game.blackUserId
   });
 });
@@ -84,11 +86,11 @@ app.get('/api/game/:gameId/state', (req, res) => {
     color,
     fen: chess.fen(),
     turn: chess.turn(),
-    isGameOver: chess.isGameOver(),
-    winner: chess.isCheckmate() ? (chess.turn() === 'w' ? 'black' : 'white') : null,
-    inCheck: chess.inCheck(),
-    isStalemate: chess.isStalemate(),
-    isDraw: chess.isDraw(),
+    isGameOver: chess.game_over(),
+    winner: chess.in_checkmate() ? (chess.turn() === 'w' ? 'black' : 'white') : null,
+    inCheck: chess.in_check(),
+    isStalemate: chess.in_stalemate(),
+    isDraw: chess.in_draw(),
     lastMove: game.lastMove || null,
     waitingForOpponent: !game.whiteUserId || !game.blackUserId
   });
@@ -122,9 +124,9 @@ app.post('/api/game/:gameId/move', (req, res) => {
       success: true,
       fen: game.chess.fen(),
       turn: game.chess.turn(),
-      isGameOver: game.chess.isGameOver(),
-      winner: game.chess.isCheckmate() ? (game.chess.turn() === 'w' ? 'black' : 'white') : null,
-      inCheck: game.chess.inCheck(),
+      isGameOver: game.chess.game_over(),
+      winner: game.chess.in_checkmate() ? (game.chess.turn() === 'w' ? 'black' : 'white') : null,
+      inCheck: game.chess.in_check(),
       move
     });
   } catch (err) {
