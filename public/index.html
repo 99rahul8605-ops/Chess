@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Chess Mini App</title>
+  <title>Chess Mini App · Time Control</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,6 +15,35 @@
       padding: 12px;
     }
     h2 { font-size: 1.3rem; letter-spacing: 5px; margin-bottom: 5px; }
+    #clocks {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 576px;
+      margin-bottom: 8px;
+      gap: 12px;
+    }
+    .clock {
+      background: rgba(0,0,0,0.4);
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 1.2rem;
+      font-family: monospace;
+      letter-spacing: 2px;
+      border: 1px solid var(--tg-theme-button-color, #4a3010);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      text-align: center;
+      flex: 1;
+    }
+    .clock.active {
+      border-color: #64b050;
+      color: #a5d6a5;
+      box-shadow: 0 0 8px #4caf50;
+    }
+    .clock.low-time {
+      color: #e84040;
+      border-color: #e84040;
+    }
     #status {
       font-size: 0.72rem; letter-spacing: 3px; min-height: 22px; margin-bottom: 8px;
       text-align: center;
@@ -85,6 +114,10 @@
 <body>
 <h2>♜ CHESS ♞</h2>
 <div id="player-color"></div>
+<div id="clocks">
+  <div id="white-clock" class="clock">10:00</div>
+  <div id="black-clock" class="clock">10:00</div>
+</div>
 <div id="status">Connecting...</div>
 <div id="board-wrap"><div id="board" class="loading">Loading game...</div></div>
 <div id="controls">
@@ -131,6 +164,13 @@
   let updateInterval = null;
   let waitingForOpponent = true;
   let currentTurn = 'w';             // 'w' or 'b' from latest game state
+  let gameOver = false;
+
+  // Time control state
+  let whiteTime = 600;               // in seconds (default 10 min)
+  let blackTime = 600;
+  let lastServerTimestamp = null;    // server's reference timestamp (ms)
+  let localTimerInterval = null;
 
   // --- Piece SVG (unchanged) ---
   function mkPiece(type, isWhite) {
@@ -215,7 +255,63 @@
     return files[col] + ranks[row];
   }
 
-  // ---------- Move Generation (basic) ----------
+  // ---------- Time formatting and display ----------
+  function formatTime(seconds) {
+    if (seconds < 0) seconds = 0;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+
+  function updateClockDisplay() {
+    const whiteClock = document.getElementById('white-clock');
+    const blackClock = document.getElementById('black-clock');
+    whiteClock.textContent = formatTime(whiteTime);
+    blackClock.textContent = formatTime(blackTime);
+
+    // Active turn highlight
+    whiteClock.classList.toggle('active', currentTurn === 'w' && !gameOver && !waitingForOpponent);
+    blackClock.classList.toggle('active', currentTurn === 'b' && !gameOver && !waitingForOpponent);
+
+    // Low time warning (< 30 seconds)
+    whiteClock.classList.toggle('low-time', whiteTime < 30);
+    blackClock.classList.toggle('low-time', blackTime < 30);
+  }
+
+  function startLocalTimer() {
+    if (localTimerInterval) clearInterval(localTimerInterval);
+    localTimerInterval = setInterval(() => {
+      if (gameOver || waitingForOpponent) return;
+      if (currentTurn === 'w') {
+        whiteTime = Math.max(0, whiteTime - 0.1);
+        if (whiteTime <= 0) {
+          gameOver = true;
+          clearInterval(localTimerInterval);
+          document.getElementById('status').textContent = 'WHITE OUT OF TIME · BLACK WINS!';
+          document.getElementById('status').className = 'checkmate';
+        }
+      } else if (currentTurn === 'b') {
+        blackTime = Math.max(0, blackTime - 0.1);
+        if (blackTime <= 0) {
+          gameOver = true;
+          clearInterval(localTimerInterval);
+          document.getElementById('status').textContent = 'BLACK OUT OF TIME · WHITE WINS!';
+          document.getElementById('status').className = 'checkmate';
+        }
+      }
+      updateClockDisplay();
+    }, 100);
+  }
+
+  // Sync times from server response
+  function syncTimeFromServer(data) {
+    if (data.whiteTime !== undefined) whiteTime = data.whiteTime;
+    if (data.blackTime !== undefined) blackTime = data.blackTime;
+    if (data.lastMoveTimestamp) lastServerTimestamp = data.lastMoveTimestamp;
+    updateClockDisplay();
+  }
+
+  // ---------- Helper functions for color / attacks ----------
   function isWhitePiece(piece) {
     return piece && piece === piece.toUpperCase() && piece !== piece.toLowerCase();
   }
@@ -229,23 +325,139 @@
     return isWhitePiece(piece) ? 'white' : 'black';
   }
 
-  // Generate all pseudo-legal moves for a piece at (row, col)
+  // Check if a square is attacked by a given color (on current boardState)
+  function isSquareAttacked(attackingColor, row, col) {
+    // Pawn attacks
+    const pawnDir = attackingColor === 'white' ? 1 : -1;
+    const pawnAttacks = [[pawnDir, -1], [pawnDir, 1]];
+    for (let [dr, dc] of pawnAttacks) {
+      const r = row + dr, c = col + dc;
+      if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+        const piece = boardState[r][c];
+        if (piece && piece.toUpperCase() === 'P' && getPieceColor(piece) === attackingColor) return true;
+      }
+    }
+
+    // Knight attacks
+    const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+    for (let [dr, dc] of knightMoves) {
+      const r = row + dr, c = col + dc;
+      if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+        const piece = boardState[r][c];
+        if (piece && piece.toUpperCase() === 'N' && getPieceColor(piece) === attackingColor) return true;
+      }
+    }
+
+    // Bishop/Queen diagonals
+    const diagDirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+    for (let [dr, dc] of diagDirs) {
+      let r = row + dr, c = col + dc;
+      while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+        const piece = boardState[r][c];
+        if (piece) {
+          if (getPieceColor(piece) === attackingColor && 
+              (piece.toUpperCase() === 'B' || piece.toUpperCase() === 'Q')) return true;
+          break;
+        }
+        r += dr; c += dc;
+      }
+    }
+
+    // Rook/Queen straight lines
+    const straightDirs = [[-1,0],[1,0],[0,-1],[0,1]];
+    for (let [dr, dc] of straightDirs) {
+      let r = row + dr, c = col + dc;
+      while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+        const piece = boardState[r][c];
+        if (piece) {
+          if (getPieceColor(piece) === attackingColor && 
+              (piece.toUpperCase() === 'R' || piece.toUpperCase() === 'Q')) return true;
+          break;
+        }
+        r += dr; c += dc;
+      }
+    }
+
+    // King attacks (adjacent)
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const r = row + dr, c = col + dc;
+        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+          const piece = boardState[r][c];
+          if (piece && piece.toUpperCase() === 'K' && getPieceColor(piece) === attackingColor) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function isKingInCheck(color) {
+    // Find king of that color
+    const kingChar = color === 'white' ? 'K' : 'k';
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (boardState[r][c] === kingChar) {
+          return isSquareAttacked(color === 'white' ? 'black' : 'white', r, c);
+        }
+      }
+    }
+    return false; // shouldn't happen
+  }
+
+  // Clone the board for simulation
+  function cloneBoard(board) {
+    return board.map(row => [...row]);
+  }
+
+  // Simulate a move and check if king is safe
+  function isMoveLegal(fromRow, fromCol, toRow, toCol, pieceColor) {
+    const boardCopy = cloneBoard(boardState);
+    const piece = boardCopy[fromRow][fromCol];
+    // Make move
+    boardCopy[toRow][toCol] = piece;
+    boardCopy[fromRow][fromCol] = '';
+    
+    // Find king of moving color
+    let kingRow = -1, kingCol = -1;
+    const kingChar = pieceColor === 'white' ? 'K' : 'k';
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (boardCopy[r][c] === kingChar) {
+          kingRow = r; kingCol = c;
+          break;
+        }
+      }
+    }
+    if (kingRow === -1) return false;
+    
+    // Check if king is attacked on the copied board
+    const opponentColor = pieceColor === 'white' ? 'black' : 'white';
+    // Temporarily set boardState to copy for attack check
+    const originalBoard = boardState;
+    boardState = boardCopy;
+    const inCheck = isSquareAttacked(opponentColor, kingRow, kingCol);
+    boardState = originalBoard;
+    return !inCheck;
+  }
+
+  // Generate all pseudo-legal moves for a piece at (row, col), then filter legal ones
   function getMovesFromSquare(row, col) {
     const piece = boardState[row][col];
     if (!piece) return [];
     const pieceType = piece.toUpperCase();
     const pieceColor = getPieceColor(piece);
-    const moves = [];
+    const pseudoMoves = [];
 
     function addMoveIfValid(toRow, toCol) {
       if (toRow < 0 || toRow > 7 || toCol < 0 || toCol > 7) return false;
       const target = boardState[toRow][toCol];
       if (target) {
         if (getPieceColor(target) === pieceColor) return false; // can't capture own
-        moves.push({ toRow, toCol, isCapture: true });
+        pseudoMoves.push({ toRow, toCol, isCapture: true });
         return false; // blocked by opponent piece
       } else {
-        moves.push({ toRow, toCol, isCapture: false });
+        pseudoMoves.push({ toRow, toCol, isCapture: false });
         return true; // continue sliding
       }
     }
@@ -257,12 +469,12 @@
       // forward 1
       const oneStepRow = row + direction;
       if (oneStepRow >= 0 && oneStepRow < 8 && !boardState[oneStepRow][col]) {
-        moves.push({ toRow: oneStepRow, toCol: col, isCapture: false });
+        pseudoMoves.push({ toRow: oneStepRow, toCol: col, isCapture: false });
         // forward 2 from start
         if (row === startRow) {
           const twoStepRow = row + 2 * direction;
           if (!boardState[twoStepRow][col]) {
-            moves.push({ toRow: twoStepRow, toCol: col, isCapture: false });
+            pseudoMoves.push({ toRow: twoStepRow, toCol: col, isCapture: false });
           }
         }
       }
@@ -273,7 +485,7 @@
         if (capRow >= 0 && capRow < 8 && capCol >= 0 && capCol < 8) {
           const target = boardState[capRow][capCol];
           if (target && getPieceColor(target) !== pieceColor) {
-            moves.push({ toRow: capRow, toCol: capCol, isCapture: true });
+            pseudoMoves.push({ toRow: capRow, toCol: capCol, isCapture: true });
           }
         }
       }
@@ -286,8 +498,8 @@
         const nr = row + dr, nc = col + dc;
         if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
           const target = boardState[nr][nc];
-          if (!target) moves.push({ toRow: nr, toCol: nc, isCapture: false });
-          else if (getPieceColor(target) !== pieceColor) moves.push({ toRow: nr, toCol: nc, isCapture: true });
+          if (!target) pseudoMoves.push({ toRow: nr, toCol: nc, isCapture: false });
+          else if (getPieceColor(target) !== pieceColor) pseudoMoves.push({ toRow: nr, toCol: nc, isCapture: true });
         }
       }
     }
@@ -305,11 +517,11 @@
         while (r >= 0 && r < 8 && c >= 0 && c < 8) {
           const target = boardState[r][c];
           if (!target) {
-            moves.push({ toRow: r, toCol: c, isCapture: false });
+            pseudoMoves.push({ toRow: r, toCol: c, isCapture: false });
             r += dr; c += dc;
           } else {
             if (getPieceColor(target) !== pieceColor) {
-              moves.push({ toRow: r, toCol: c, isCapture: true });
+              pseudoMoves.push({ toRow: r, toCol: c, isCapture: true });
             }
             break;
           }
@@ -324,14 +536,22 @@
           const nr = row + dr, nc = col + dc;
           if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
             const target = boardState[nr][nc];
-            if (!target) moves.push({ toRow: nr, toCol: nc, isCapture: false });
-            else if (getPieceColor(target) !== pieceColor) moves.push({ toRow: nr, toCol: nc, isCapture: true });
+            if (!target) pseudoMoves.push({ toRow: nr, toCol: nc, isCapture: false });
+            else if (getPieceColor(target) !== pieceColor) pseudoMoves.push({ toRow: nr, toCol: nc, isCapture: true });
           }
         }
       }
       // castling skipped (backend validates)
     }
-    return moves;
+
+    // Filter out moves that would leave/put king in check
+    const legalMoves = [];
+    for (let move of pseudoMoves) {
+      if (isMoveLegal(row, col, move.toRow, move.toCol, pieceColor)) {
+        legalMoves.push(move);
+      }
+    }
+    return legalMoves;
   }
 
   // ---------- Game logic ----------
@@ -352,8 +572,11 @@
       document.getElementById('player-color').innerHTML = `You are: ${myColor.toUpperCase()}`;
       boardState = fenToBoard(data.fen);
       currentTurn = data.turn;
+      gameOver = data.isGameOver || false;
+      syncTimeFromServer(data);
       renderBoard();
       updateStatus(data);
+      startLocalTimer();
       startPolling();
     } catch (err) {
       console.error('Join error:', err);
@@ -369,6 +592,9 @@
       const data = await res.json();
       waitingForOpponent = data.waitingForOpponent;
       currentTurn = data.turn;
+      gameOver = data.isGameOver || false;
+      syncTimeFromServer(data);
+      
       const newBoard = fenToBoard(data.fen);
       if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
@@ -379,6 +605,11 @@
         renderBoard();
       }
       updateStatus(data);
+      
+      if (gameOver) {
+        clearInterval(localTimerInterval);
+        clearInterval(updateInterval);
+      }
     } catch (err) {}
   }
 
@@ -387,6 +618,8 @@
       document.getElementById('status').textContent = 'Waiting for opponent to join...';
       return;
     }
+    if (gameOver) return;
+    
     const from = coordToAlgebraic(fromInternal.row, fromInternal.col);
     const to = coordToAlgebraic(toInternal.row, toInternal.col);
     try {
@@ -400,11 +633,14 @@
         boardState = fenToBoard(data.fen);
         lastMove = { from, to };
         currentTurn = data.turn;
+        gameOver = data.isGameOver || false;
+        syncTimeFromServer(data);
         selectedSquare = null;
         possibleMoves = [];
         renderBoard();
         updateStatus(data);
         tg.HapticFeedback.impactOccurred('light');
+        if (gameOver) clearInterval(localTimerInterval);
       } else {
         document.getElementById('status').textContent = `Invalid: ${data.error || 'move'}`;
         setTimeout(() => fetchGameState(), 1000);
@@ -424,6 +660,7 @@
     if (data.isGameOver) {
       if (data.winner) statusDiv.textContent = `${data.winner.toUpperCase()} WINS!`;
       else if (data.isStalemate) statusDiv.textContent = 'STALEMATE';
+      else if (data.outOfTime) statusDiv.textContent = `${data.outOfTime === 'white' ? 'WHITE' : 'BLACK'} OUT OF TIME`;
       else statusDiv.textContent = 'GAME OVER';
       statusDiv.className = 'checkmate';
       if (updateInterval) clearInterval(updateInterval);
@@ -521,6 +758,10 @@
     if (!myColor || myColor === 'spectator') return;
     if (waitingForOpponent) {
       document.getElementById('status').textContent = 'Waiting for opponent...';
+      return;
+    }
+    if (gameOver) {
+      document.getElementById('status').textContent = 'Game is over';
       return;
     }
 
