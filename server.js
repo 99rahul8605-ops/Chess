@@ -334,7 +334,7 @@ app.post('/api/game/:gameId/resign', (req, res) => {
   }
 
   // Mark game as over with winner = opposite color
-  game.gameOverByTime = true; // reuse flag to stop moves
+  game.gameOverByTime = true;
   const winner = playerColor === 'white' ? 'black' : 'white';
   
   res.json({
@@ -409,6 +409,7 @@ bot.command('newgame', async (ctx) => {
     const messageText = `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 10 min each`;
 
     if (isGroup) {
+      // Group: show both Mini App and browser link
       await ctx.reply(messageText, {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -419,12 +420,15 @@ bot.command('newgame', async (ctx) => {
         }
       });
     } else {
+      // Private chat: show invite and share options, no browser link
+      const inviteLink = `https://t.me/${BOT_USERNAME}?start=invite_${gameId}`;
       await ctx.reply(messageText, {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: [[
-            { text: '♟️ Open Chess Board', web_app: { url: webAppUrl } }
-          ]]
+          inline_keyboard: [
+            [{ text: '👥 Invite Friend', url: inviteLink }],
+            [{ text: '♟️ Play Now', web_app: { url: webAppUrl } }]
+          ]
         }
       });
     }
