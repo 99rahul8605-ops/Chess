@@ -11,79 +11,65 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Game storage
-const games = new Map(); // gameId -> { chess, whiteClientId, blackClientId, clients: Map, createdAt }
+// Game storage: gameId -> { chess, whiteUserId, blackUserId, clients: Map, createdAt }
+const games = new Map();
 
-// Bot setup
-const bot = new Telegraf(BOT_TOKEN);
-
-// Helper: Generate game link
-function getGameLink(gameId) {
-  return `${BASE_URL}/?game=${gameId}`;
+// Helper: generate full game URL for WebApp
+function getGameUrl(gameId, color = null) {
+  let url = `${BASE_URL}/?game=${gameId}`;
+  if (color) url += `&color=${color}`;
+  return url;
 }
 
 // API Routes
 
-// Create new game
 app.post('/api/game/new', (req, res) => {
   const gameId = uuidv4().slice(0, 8);
   const chess = new Chess();
-  
   games.set(gameId, {
     chess,
-    whiteClientId: null,
-    blackClientId: null,
-    clients: new Map(), // clientId -> color
+    whiteUserId: null,
+    blackUserId: null,
+    clients: new Map(), // telegramUserId -> color
     createdAt: Date.now()
   });
-  
-  res.json({ 
-    gameId, 
-    link: getGameLink(gameId),
-    whiteLink: `${getGameLink(gameId)}&color=white`,
-    blackLink: `${getGameLink(gameId)}&color=black`
+  res.json({
+    gameId,
+    whiteUrl: getGameUrl(gameId, 'white'),
+    blackUrl: getGameUrl(gameId, 'black')
   });
 });
 
-// Join game
 app.post('/api/game/:gameId/join', (req, res) => {
   const { gameId } = req.params;
-  const { clientId, preferredColor } = req.body;
-  
+  const { userId, preferredColor } = req.body;
   const game = games.get(gameId);
-  if (!game) {
-    return res.status(404).json({ error: 'Game not found' });
-  }
-  
-  // Check if client already has a color
-  let assignedColor = game.clients.get(clientId);
-  
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  let assignedColor = game.clients.get(userId);
   if (!assignedColor) {
-    // Assign color based on availability
-    if (preferredColor === 'white' && !game.whiteClientId) {
+    if (preferredColor === 'white' && !game.whiteUserId) {
       assignedColor = 'white';
-      game.whiteClientId = clientId;
-    } else if (preferredColor === 'black' && !game.blackClientId) {
+      game.whiteUserId = userId;
+    } else if (preferredColor === 'black' && !game.blackUserId) {
       assignedColor = 'black';
-      game.blackClientId = clientId;
-    } else if (!game.whiteClientId) {
+      game.blackUserId = userId;
+    } else if (!game.whiteUserId) {
       assignedColor = 'white';
-      game.whiteClientId = clientId;
-    } else if (!game.blackClientId) {
+      game.whiteUserId = userId;
+    } else if (!game.blackUserId) {
       assignedColor = 'black';
-      game.blackClientId = clientId;
+      game.blackUserId = userId;
     } else {
-      assignedColor = 'spectator';
+      return res.status(403).json({ error: 'Game is full' });
     }
-    
-    game.clients.set(clientId, assignedColor);
+    game.clients.set(userId, assignedColor);
   }
-  
+
   res.json({
     color: assignedColor,
     fen: game.chess.fen(),
@@ -94,19 +80,14 @@ app.post('/api/game/:gameId/join', (req, res) => {
   });
 });
 
-// Get game state
 app.get('/api/game/:gameId/state', (req, res) => {
   const { gameId } = req.params;
-  const { clientId } = req.query;
-  
+  const { userId } = req.query;
   const game = games.get(gameId);
-  if (!game) {
-    return res.status(404).json({ error: 'Game not found' });
-  }
-  
-  const color = game.clients.get(clientId) || 'spectator';
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  const color = game.clients.get(userId) || null;
   const chess = game.chess;
-  
   res.json({
     color,
     fen: chess.fen(),
@@ -120,129 +101,116 @@ app.get('/api/game/:gameId/state', (req, res) => {
   });
 });
 
-// Make a move
 app.post('/api/game/:gameId/move', (req, res) => {
   const { gameId } = req.params;
-  const { clientId, from, to, promotion = 'q' } = req.body;
-  
+  const { userId, from, to, promotion = 'q' } = req.body;
   const game = games.get(gameId);
-  if (!game) {
-    return res.status(404).json({ error: 'Game not found' });
-  }
-  
-  const color = game.clients.get(clientId);
-  const chess = game.chess;
-  
-  // Validate player color and turn
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  const color = game.clients.get(userId);
   if (color !== 'white' && color !== 'black') {
-    return res.status(403).json({ error: 'You are a spectator' });
+    return res.status(403).json({ error: 'You are not a player' });
   }
-  
+
   const expectedTurn = color === 'white' ? 'w' : 'b';
-  if (chess.turn() !== expectedTurn) {
+  if (game.chess.turn() !== expectedTurn) {
     return res.status(400).json({ error: 'Not your turn' });
   }
-  
-  // Attempt the move
+
   try {
-    const move = chess.move({ from, to, promotion });
-    if (!move) {
-      return res.status(400).json({ error: 'Invalid move' });
-    }
-    
+    const move = game.chess.move({ from, to, promotion });
+    if (!move) return res.status(400).json({ error: 'Invalid move' });
     game.lastMove = { from, to };
-    
     res.json({
       success: true,
-      fen: chess.fen(),
-      turn: chess.turn(),
-      isGameOver: chess.isGameOver(),
-      winner: chess.isCheckmate() ? (chess.turn() === 'w' ? 'black' : 'white') : null,
-      inCheck: chess.inCheck(),
+      fen: game.chess.fen(),
+      turn: game.chess.turn(),
+      isGameOver: game.chess.isGameOver(),
+      winner: game.chess.isCheckmate() ? (game.chess.turn() === 'w' ? 'black' : 'white') : null,
+      inCheck: game.chess.inCheck(),
       move
     });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
-// Clean up old games (older than 1 hour)
+// Cleanup old games
 setInterval(() => {
   const now = Date.now();
-  for (const [gameId, game] of games.entries()) {
-    if (now - game.createdAt > 3600000) {
-      games.delete(gameId);
-    }
+  for (const [id, game] of games.entries()) {
+    if (now - game.createdAt > 3600000) games.delete(id);
   }
 }, 600000);
 
-// Telegram Bot Commands
+// Telegram Bot
+
+const bot = new Telegraf(BOT_TOKEN);
 
 bot.start((ctx) => {
   ctx.reply(
-    '♟️ *Welcome to Multiplayer Chess Bot!* ♞\n\n' +
-    'Use /newgame to create a new chess game and invite a friend to play.\n\n' +
-    'Each player will get a unique link to the chess board. Share the black player link with your opponent!\n\n' +
-    'The game is played in real-time in your browser.',
+    '♟️ *Multiplayer Chess Mini App* ♞\n\n' +
+    'Use /newgame to create a chess game and invite a friend.\n' +
+    'The game will open inside Telegram as a Mini App.\n\n' +
+    'Each player will get a separate button (White / Black).',
     { parse_mode: 'Markdown' }
   );
 });
 
 bot.command('newgame', async (ctx) => {
   try {
-    const response = await fetch(`${BASE_URL}/api/game/new`, {
-      method: 'POST'
-    });
-    const { gameId, whiteLink, blackLink } = await response.json();
-    
-    const gameUrl = `${BASE_URL}/?game=${gameId}`;
-    
-    ctx.reply(
-      '🎮 *New Chess Game Created!* 🎮\n\n' +
-      `Game ID: \`${gameId}\`\n\n` +
-      '*Share these links:*\n' +
-      `👑 White Player: ${whiteLink}\n` +
-      `♟️ Black Player: ${blackLink}\n\n` +
-      'Click the link to join the game. First player to join gets white, second gets black.',
+    const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
+    const { gameId, whiteUrl, blackUrl } = await response.json();
+
+    // Send two separate messages with WebApp buttons
+    await ctx.reply(
+      `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\``,
       { parse_mode: 'Markdown' }
     );
-    
-    // Send inline keyboard for easy sharing
-    ctx.reply('Share with a friend:', {
+
+    await ctx.reply('👑 **White Player** – click below to play:', {
+      parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
-          [
-            { text: '🎮 Copy White Link', callback_data: `copy_${whiteLink}` },
-            { text: '♟️ Copy Black Link', callback_data: `copy_${blackLink}` }
-          ],
-          [{ text: '📱 Open Game', url: gameUrl }]
+          [{ text: '♔ Play as White', web_app: { url: whiteUrl } }]
         ]
       }
     });
-  } catch (error) {
-    console.error('Error creating game:', error);
-    ctx.reply('Sorry, there was an error creating the game. Please try again.');
-  }
-});
 
-bot.action(/copy_(.+)/, async (ctx) => {
-  const url = ctx.match[1];
-  ctx.answerCbQuery();
-  ctx.reply(`🔗 Here's your link:\n${url}`);
+    await ctx.reply('♟️ **Black Player** – click below to play:', {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '♚ Play as Black', web_app: { url: blackUrl } }]
+        ]
+      }
+    });
+
+    // Also send a shareable game link (optional)
+    await ctx.reply(`Or share this link: ${BASE_URL}/?game=${gameId}`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📱 Open Game', url: `${BASE_URL}/?game=${gameId}` }]
+        ]
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    ctx.reply('Sorry, could not create game. Please try again.');
+  }
 });
 
 bot.launch();
 
-// Express server
+// Express serves the Mini App HTML
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Bot URL: ${BASE_URL}`);
+  console.log(`Server running on ${PORT}`);
+  console.log(`Bot ready. Mini App URL: ${BASE_URL}`);
 });
 
-// Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
