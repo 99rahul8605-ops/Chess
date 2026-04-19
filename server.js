@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Telegram Mini App ke liye HTTPS zaruri hai
+BASE_URL = BASE_URL.replace(/\/$/, '');
 if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_URL.includes('127.0.0.1')) {
   BASE_URL = BASE_URL.replace('http://', 'https://');
 }
@@ -19,50 +19,101 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Game storage
+// ========== SHARED GAME STORAGE ==========
 const games = new Map();
 
-function getGameUrl(gameId) {
-  return `${BASE_URL}/?game=${gameId}`;
-}
-
-// ========== API ROUTES (Game Logic) ==========
-app.post('/api/game/new', (req, res) => {
+function createNewGame() {
   const gameId = uuidv4().slice(0, 8);
   const chess = new Chess();
   games.set(gameId, {
     chess,
     whiteUserId: null,
     blackUserId: null,
-    clients: new Map(),
+    players: new Map(),
     createdAt: Date.now()
   });
+  return gameId;
+}
+
+function getGameUrl(gameId) {
+  return `${BASE_URL}/?game=${gameId}`;
+}
+
+// ========== API ROUTES ==========
+app.post('/api/game/new', (req, res) => {
+  const gameId = createNewGame();
   res.json({ gameId, url: getGameUrl(gameId) });
 });
 
 app.post('/api/game/:gameId/join', (req, res) => {
   const { gameId } = req.params;
   const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
   const game = games.get(gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
 
-  let assignedColor = game.clients.get(userId);
-  if (!assignedColor) {
-    if (!game.whiteUserId) {
-      assignedColor = 'white';
-      game.whiteUserId = userId;
-    } else if (!game.blackUserId) {
-      assignedColor = 'black';
-      game.blackUserId = userId;
-    } else {
-      return res.status(403).json({ error: 'Game is full' });
-    }
-    game.clients.set(userId, assignedColor);
+  if (game.players.has(userId)) {
+    return res.json({ color: game.players.get(userId), fen: game.chess.fen() });
   }
+
+  let assignedColor;
+  if (!game.whiteUserId) {
+    assignedColor = 'white';
+    game.whiteUserId = userId;
+  } else if (!game.blackUserId) {
+    assignedColor = 'black';
+    game.blackUserId = userId;
+  } else {
+    return res.json({ color: 'spectator', fen: game.chess.fen() });
+  }
+
+  game.players.set(userId, assignedColor);
   res.json({ color: assignedColor, fen: game.chess.fen() });
 });
 
-// Clean up old games (1 hour)
+app.get('/api/game/:gameId', (req, res) => {
+  const game = games.get(req.params.gameId);
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+  res.json({
+    fen: game.chess.fen(),
+    turn: game.chess.turn(),
+    isGameOver: game.chess.isGameOver(),
+    whiteReady: !!game.whiteUserId,
+    blackReady: !!game.blackUserId
+  });
+});
+
+app.post('/api/game/:gameId/move', (req, res) => {
+  const { gameId } = req.params;
+  const { userId, move } = req.body;
+  if (!userId || !move) return res.status(400).json({ error: 'userId and move required' });
+
+  const game = games.get(gameId);
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  const playerColor = game.players.get(userId);
+  if (!playerColor || playerColor === 'spectator') return res.status(403).json({ error: 'Not a player' });
+
+  const currentTurn = game.chess.turn();
+  if ((currentTurn === 'w' && playerColor !== 'white') || (currentTurn === 'b' && playerColor !== 'black')) {
+    return res.status(403).json({ error: 'Not your turn' });
+  }
+
+  if (!game.whiteUserId || !game.blackUserId) {
+    return res.status(400).json({ error: 'Waiting for opponent' });
+  }
+
+  try {
+    const result = game.chess.move(move);
+    if (!result) return res.status(400).json({ error: 'Invalid move' });
+    res.json({ success: true, move: result, fen: game.chess.fen(), isGameOver: game.chess.isGameOver() });
+  } catch (err) {
+    res.status(400).json({ error: 'Invalid move: ' + err.message });
+  }
+});
+
+// Cleanup old games every 10 min
 setInterval(() => {
   const now = Date.now();
   for (const [id, game] of games.entries()) {
@@ -70,54 +121,49 @@ setInterval(() => {
   }
 }, 600000);
 
-// ========== TELEGRAM BOT LOGIC ==========
+// ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
 async function createGame(ctx) {
   try {
-    // API se naya game link mangwana
-    const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
-    const data = await response.json();
-    const gameUrl = data.url;
+    // ✅ KEY FIX: Create game directly in memory — NO self-fetch
+    // Self-fetch on Render free tier causes the server to hang/timeout
+    const gameId = createNewGame();
+    const gameUrl = getGameUrl(gameId);
 
-    const messageText = `🎮 *New Chess Game Created!*\n\nNiche diye gaye button par click karke Join karein.`;
+    const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
 
-    // FIXED: Group ke liye 'url' button use kiya hai, 'web_app' nahi
-    // Isse BUTTON_TYPE_INVALID error nahi aayega
+    // ✅ Groups only support 'url' buttons — 'web_app' buttons are blocked in groups
     const replyMarkup = {
-      inline_keyboard: [
-        [
-          { 
-            text: '♟️ Play Chess (Join)', 
-            url: gameUrl 
-          }
-        ]
-      ]
+      inline_keyboard: [[
+        isGroup
+          ? { text: '♟️ Join & Play Chess', url: gameUrl }
+          : { text: '♟️ Open Chess Game', web_app: { url: gameUrl } }
+      ]]
     };
-    
-    await ctx.reply(messageText, { 
-      parse_mode: 'Markdown', 
-      reply_markup: replyMarkup 
-    });
+
+    await ctx.reply(
+      `🎮 *New Chess Game Created!*\n\nGame ID: \`${gameId}\`\n\n1st player = ♔ White\n2nd player = ♚ Black\n\nClick below to join!`,
+      { parse_mode: 'Markdown', reply_markup: replyMarkup }
+    );
 
   } catch (err) {
-    console.error('Error:', err);
-    ctx.reply('⚠️ Error: Server link (BASE_URL) sahi nahi hai ya server down hai.');
+    console.error('createGame error:', err);
+    await ctx.reply('⚠️ Could not create game. Check server logs.');
   }
 }
 
-// Commands
+bot.start((ctx) => ctx.reply('♟️ Chess Bot ready!\n\nUse /newgame to start a game.'));
 bot.command('newgame', (ctx) => createGame(ctx));
-bot.start((ctx) => ctx.reply('Chess bot ready! /newgame likhein.'));
 
-// Server aur Bot ko start karna
+// ========== START ==========
 app.listen(PORT, () => {
-  console.log(`✅ Server is running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`🌐 BASE_URL: ${BASE_URL}`);
   bot.launch()
-    .then(() => console.log('✅ Bot is online!'))
-    .catch((err) => console.error('❌ Bot error:', err));
+    .then(() => console.log('✅ Bot online!'))
+    .catch((err) => console.error('❌ Bot error:', err.message));
 });
 
-// Safe shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
