@@ -42,7 +42,6 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Helper to update user stats
 async function updateUserStats(userId, userInfo, result) {
   if (!userId) return;
   try {
@@ -50,7 +49,6 @@ async function updateUserStats(userId, userInfo, result) {
     if (!user) {
       user = new User({ userId, ...userInfo });
     } else {
-      // Update info if changed
       if (userInfo) {
         user.firstName = userInfo.firstName || user.firstName;
         user.lastName = userInfo.lastName || user.lastName;
@@ -151,7 +149,7 @@ function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
     gameOverByTime: false,
     whitePlayerInfo: null,
     blackPlayerInfo: null,
-    statsRecorded: false, // flag to prevent double stats update
+    statsRecorded: false,
   });
   activeViewers.set(gameId, new Map());
   return gameId;
@@ -254,6 +252,8 @@ function buildStateResponse(game, gameId) {
     whiteTime: game.whiteTime,
     blackTime: game.blackTime,
     lastMoveTimestamp: game.lastMoveTimestamp,
+    whiteUserId: game.whiteUserId,
+    blackUserId: game.blackUserId,
     whitePlayer: game.whitePlayerInfo,
     blackPlayer: game.blackPlayerInfo,
     spectatorCount,
@@ -262,7 +262,6 @@ function buildStateResponse(game, gameId) {
 
 // ========== API ROUTES ==========
 
-// Get user stats
 app.get('/api/user/:userId/stats', async (req, res) => {
   try {
     const user = await User.findOne({ userId: req.params.userId });
@@ -402,7 +401,6 @@ app.post('/api/game/:gameId/move', (req, res) => {
     
     const response = { success: true, move: result, ...buildStateResponse(game, gameId) };
     
-    // If game ended by checkmate/draw, record stats
     if (c.isGameOver()) {
       recordGameResult(game);
     }
@@ -437,7 +435,6 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
   game.gameOverByTime = true;
   const winner = playerColor === 'white' ? 'black' : 'white';
   
-  // Record stats
   await recordGameResult(game);
   
   res.json({
@@ -447,7 +444,7 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
   });
 });
 
-// Cleanup
+// Cleanup every minute
 setInterval(() => {
   const now = Date.now();
   for (const [gameId, viewers] of activeViewers.entries()) {
