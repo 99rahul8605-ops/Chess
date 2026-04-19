@@ -123,6 +123,7 @@
       box-shadow: 0 8px 40px rgba(0,0,0,0.8);
       width: 100%;
       max-width: 576px;
+      position: relative;
     }
     #board {
       display: grid;
@@ -158,6 +159,25 @@
     }
     .capture-highlight {
       box-shadow: inset 0 0 0 3.5px #4CAF50 !important;
+    }
+
+    /* Waiting overlay */
+    #waiting-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(30,19,10,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      z-index: 10;
+      border-radius: inherit;
+    }
+    .waiting-message {
+      text-align: center;
+      font-size: 1.2rem;
+      letter-spacing: 3px;
+      color: #c9a84c;
     }
 
     #controls {
@@ -213,12 +233,18 @@
 </div>
 
 <div id="status">Connecting...</div>
-<div id="board-wrap"><div id="board" class="loading">Loading game...</div></div>
+
+<div id="board-wrap">
+  <div id="board" class="loading">Loading game...</div>
+  <div id="waiting-overlay" style="display: none;">
+    <div class="waiting-message">⏳ WAITING FOR OPPONENT...</div>
+  </div>
+</div>
 
 <div id="controls">
   <div id="info"></div>
   <button id="resign-btn" onclick="resignGame()">🏳️ RESIGN</button>
-  <button onclick="location.reload()">⟳ NEW GAME</button>
+  <button onclick="newGame()">⟳ NEW GAME</button>
 </div>
 
 <script>
@@ -256,11 +282,24 @@
   // Game ID from start_param or URL
   const startParam = tg.initDataUnsafe?.start_param;
   const urlParams = new URLSearchParams(window.location.search);
-  const gameId = startParam || urlParams.get('game');
-  if (!gameId) {
-    document.getElementById('board').innerHTML = '<div class="error">No game specified.</div>';
-    document.getElementById('status').textContent = 'INVALID GAME';
-    throw new Error('No game ID');
+  let gameId = startParam || urlParams.get('game');
+
+  // If no gameId, create a new one immediately
+  async function ensureGameId() {
+    if (!gameId) {
+      try {
+        const res = await fetch('/api/game/new', { method: 'POST' });
+        const data = await res.json();
+        gameId = data.gameId;
+        // Update URL without reload
+        const url = new URL(window.location);
+        url.searchParams.set('game', gameId);
+        window.history.replaceState({}, '', url);
+      } catch (e) {
+        document.getElementById('board').innerHTML = '<div class="error">Could not create game.</div>';
+        throw e;
+      }
+    }
   }
 
   // --- State ---
@@ -278,6 +317,11 @@
   let whiteTime = 600;
   let blackTime = 600;
   let localTimerInterval = null;
+
+  // UI elements
+  const boardWrap = document.getElementById('board-wrap');
+  const boardEl = document.getElementById('board');
+  const waitingOverlay = document.getElementById('waiting-overlay');
 
   // --- Helper: update player displays & spectator count ---
   function updatePlayerDisplays(data) {
@@ -298,7 +342,13 @@
     document.getElementById('spec-count').textContent = data.spectatorCount || 0;
   }
 
-  // --- Heartbeat (keep spectator count alive) ---
+  // Toggle waiting overlay based on assignment status
+  function toggleWaitingOverlay(isWaiting) {
+    waitingOverlay.style.display = isWaiting ? 'flex' : 'none';
+    // Also disable board interaction via CSS if needed, but overlay catches clicks.
+  }
+
+  // --- Heartbeat ---
   setInterval(() => {
     if (gameId) {
       fetch(`/api/game/${gameId}/heartbeat`, {
@@ -548,13 +598,17 @@
       gameOver = data.isGameOver || false;
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
+      
+      // Show/hide waiting overlay
+      toggleWaitingOverlay(waitingForOpponent);
+      
       renderBoard();
       updateStatus(data);
       startLocalTimer();
       startPolling();
     } catch (err) {
       document.getElementById('status').textContent = 'Failed to join.';
-      document.getElementById('board').innerHTML = `<div class="error">${err.message}</div>`;
+      boardEl.innerHTML = `<div class="error">${err.message}</div>`;
     }
   }
 
@@ -564,11 +618,13 @@
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.color && !myColor) myColor = data.color;
+      const wasWaiting = waitingForOpponent;
       waitingForOpponent = data.waitingForOpponent || data.waitingForAssignment;
       currentTurn = data.turn;
       gameOver = data.isGameOver || false;
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
+      
       const newBoard = fenToBoard(data.fen);
       if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
@@ -577,6 +633,16 @@
         renderBoard();
       }
       updateStatus(data);
+      
+      // Toggle overlay if waiting status changed
+      if (wasWaiting !== waitingForOpponent) {
+        toggleWaitingOverlay(waitingForOpponent);
+        if (!waitingForOpponent) {
+          // Game started, ensure board is rendered
+          renderBoard();
+        }
+      }
+      
       if (gameOver) { clearInterval(localTimerInterval); clearInterval(updateInterval); }
     } catch (err) {}
   }
@@ -634,6 +700,17 @@
     } catch (err) { console.error(err); }
   }
 
+  async function newGame() {
+    try {
+      const res = await fetch('/api/game/new', { method: 'POST' });
+      const data = await res.json();
+      // Redirect to new game URL
+      window.location.href = `/?game=${data.gameId}`;
+    } catch (err) {
+      alert('Could not create new game.');
+    }
+  }
+
   function updateStatus(data) {
     const s = document.getElementById('status'), info = document.getElementById('info');
     if (data.isGameOver) {
@@ -657,7 +734,6 @@
   }
 
   function renderBoard() {
-    const boardEl = document.getElementById('board');
     boardEl.innerHTML = '';
     if (!boardState) return;
     for (let dr=0; dr<8; dr++) for (let dc=0; dc<8; dc++) {
@@ -703,8 +779,14 @@
 
   function startPolling() { if(updateInterval)clearInterval(updateInterval); updateInterval=setInterval(fetchGameState,1000); }
 
-  joinGame();
-  window.resignGame = resignGame; // expose for onclick
+  // Start everything
+  (async () => {
+    await ensureGameId();
+    joinGame();
+  })();
+
+  window.resignGame = resignGame;
+  window.newGame = newGame;
 </script>
 </body>
 </html>
