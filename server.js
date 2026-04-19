@@ -456,18 +456,18 @@ bot.command('newgame', async (ctx) => {
         }
       });
     } else {
-      // Private chat: Share button + Play Now
+      // Private chat: Play Now + Game Link (public URL)
       await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
             [{
-              text: '📤 Share Game',
-              switch_inline_query: gameId
-            }],
-            [{
               text: '♟️ Play Now',
               web_app: { url: webAppUrl }
+            }],
+            [{
+              text: '🔗 Game Link',
+              url: webAppUrl
             }]
           ]
         }
