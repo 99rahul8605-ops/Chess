@@ -386,9 +386,13 @@
   const waitingOverlay = document.getElementById('waiting-overlay');
 
   // --- Stats Modal ---
-  function showStatsModal(userId, playerName) {
-    fetch(`/api/user/${userId}/stats`)
-      .then(r => r.json())
+  function showStatsModal(uid, playerName) {
+    if (!uid) return;
+    fetch(`/api/user/${uid}/stats`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(data => {
         document.getElementById('modal-player-name').textContent = playerName;
         document.getElementById('stat-games').textContent = data.stats.gamesPlayed;
@@ -397,14 +401,17 @@
         document.getElementById('stat-draws').textContent = data.stats.draws;
         document.getElementById('stats-modal').style.display = 'flex';
       })
-      .catch(err => console.error('Stats error:', err));
+      .catch(err => {
+        console.error('Stats error:', err);
+        alert('Could not load player stats.');
+      });
   }
 
   window.closeStatsModal = function() {
     document.getElementById('stats-modal').style.display = 'none';
   };
 
-  // Attach click listeners to avatars
+  // Attach click listeners
   document.getElementById('white-player-card').addEventListener('click', () => {
     if (whiteUserId) showStatsModal(whiteUserId, document.getElementById('white-name').textContent);
   });
@@ -414,19 +421,20 @@
 
   // --- Player Display Update ---
   function updatePlayerDisplays(data) {
-    const white = data.whitePlayer || { firstName: 'White', id: data.whiteUserId };
+    whiteUserId = data.whiteUserId;
+    blackUserId = data.blackUserId;
+
+    const white = data.whitePlayer || { firstName: 'White' };
     document.getElementById('white-name').textContent = white.firstName || 'White';
     const whiteAvatar = document.getElementById('white-avatar');
     whiteAvatar.innerHTML = white.photoUrl ? `<img src="${white.photoUrl}" alt="W">` : (white.firstName?.charAt(0) || 'W');
 
-    const black = data.blackPlayer || { firstName: 'Black', id: data.blackUserId };
+    const black = data.blackPlayer || { firstName: 'Black' };
     document.getElementById('black-name').textContent = black.firstName || 'Black';
     const blackAvatar = document.getElementById('black-avatar');
     blackAvatar.innerHTML = black.photoUrl ? `<img src="${black.photoUrl}" alt="B">` : (black.firstName?.charAt(0) || 'B');
 
     document.getElementById('spec-count').textContent = data.spectatorCount || 0;
-    whiteUserId = data.whiteUserId;
-    blackUserId = data.blackUserId;
   }
 
   function toggleWaitingOverlay(isWaiting) {
@@ -492,7 +500,7 @@
     return `<svg viewBox="0 0 45 45" xmlns="http://www.w3.org/2000/svg">${s[type] || ''}</svg>`;
   }
 
-  // Coordinate helpers, move generation (identical to previous version)
+  // Coordinate helpers
   function internalToDisplay(row, col) {
     if (myColor === 'black') return { row: 7 - row, col: 7 - col };
     return { row, col };
@@ -519,7 +527,7 @@
     return files[col] + ranks[row];
   }
 
-  // --- Move generation with check validation (identical to previous) ---
+  // --- Move generation with check validation ---
   function isWhitePiece(p) { return p && p === p.toUpperCase() && p !== p.toLowerCase(); }
   function isBlackPiece(p) { return p && p === p.toLowerCase() && p !== p.toUpperCase(); }
   function getPieceColor(p) { if (!p) return null; return isWhitePiece(p) ? 'white' : 'black'; }
@@ -676,7 +684,6 @@
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       if (data.color) myColor = data.color;
-      else myColor = null;
       waitingForOpponent = data.waitingForOpponent || data.waitingForAssignment;
       boardState = fenToBoard(data.fen);
       currentTurn = data.turn;
@@ -699,7 +706,14 @@
       const res = await fetch(`/api/game/${gameId}/state`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      if (data.color && !myColor) myColor = data.color;
+      
+      // Detect my color if not set yet
+      if (!myColor) {
+        if (data.whiteUserId === userId) myColor = 'white';
+        else if (data.blackUserId === userId) myColor = 'black';
+        else if (!data.waitingForAssignment && data.whiteUserId && data.blackUserId) myColor = 'spectator';
+      }
+      
       const wasWaiting = waitingForOpponent;
       waitingForOpponent = data.waitingForOpponent || data.waitingForAssignment;
       currentTurn = data.turn;
