@@ -61,7 +61,6 @@ app.post('/api/game/:gameId/join', (req, res) => {
     game.clients.set(userId, assignedColor);
   }
 
-  // Use correct chess.js methods
   const chess = game.chess;
   res.json({
     color: assignedColor,
@@ -168,22 +167,14 @@ bot.command('newgame', async (ctx) => {
     const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
     const { gameId, url } = await response.json();
 
-    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick the button below to join. First player gets White, second gets Black.`;
+    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick the button below to join. First player gets White, second gets Black.\n\n⚠️ The game opens inside Telegram (Mini App).`;
 
-    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-
-    let replyMarkup;
-    if (isGroup) {
-      // Groups: regular URL button (opens in browser)
-      replyMarkup = {
-        inline_keyboard: [[{ text: '♟️ Join Chess Game', url: url }]]
-      };
-    } else {
-      // Private chat: WebApp button (opens inside Telegram)
-      replyMarkup = {
-        inline_keyboard: [[{ text: '♟️ Play Chess (in-app)', web_app: { url: url } }]]
-      };
-    }
+    // Use web_app button for ALL chats (private and groups)
+    const replyMarkup = {
+      inline_keyboard: [
+        [{ text: '♟️ Play Chess (in-app)', web_app: { url: url } }]
+      ]
+    };
 
     await ctx.reply(messageText, { parse_mode: 'Markdown', reply_markup: replyMarkup });
   } catch (err) {
