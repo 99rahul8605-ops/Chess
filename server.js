@@ -27,7 +27,7 @@ function getGameUrl(gameId) {
   return `${BASE_URL}/?game=${gameId}`;
 }
 
-// ========== API ROUTES (unchanged) ==========
+// ========== API ROUTES ==========
 app.post('/api/game/new', (req, res) => {
   const gameId = uuidv4().slice(0, 8);
   const chess = new Chess();
@@ -132,7 +132,7 @@ app.post('/api/game/:gameId/move', (req, res) => {
   }
 });
 
-// Cleanup old games
+// Clean up old games
 setInterval(() => {
   const now = Date.now();
   for (const [id, game] of games.entries()) {
@@ -155,7 +155,7 @@ bot.start((ctx) => {
       '♟️ *Multiplayer Chess Mini App* ♞\n\n' +
       'Use /newgame to create a chess game and invite a friend.\n' +
       'Both players click the same button – colors are assigned automatically (first joiner = White, second = Black).\n\n' +
-      'You can also add me to a group and use /newgame there.',
+      'The game opens inside Telegram (Mini App).',
       { parse_mode: 'Markdown' }
     );
   }
@@ -172,32 +172,24 @@ bot.command('newgame', async (ctx) => {
 
     let replyMarkup;
     if (isGroup) {
-      // In groups: use regular URL button (opens in browser)
+      // Groups: regular URL button (opens in browser)
       replyMarkup = {
-        inline_keyboard: [
-          [{ text: '♟️ Join Chess Game', url: url }]
-        ]
+        inline_keyboard: [[{ text: '♟️ Join Chess Game', url: url }]]
       };
     } else {
-      // In private chat: use WebApp button (opens inside Telegram)
+      // Private chat: WebApp button (opens inside Telegram)
       replyMarkup = {
-        inline_keyboard: [
-          [{ text: '♟️ Join Chess Game', web_app: { url: url } }]
-        ]
+        inline_keyboard: [[{ text: '♟️ Play Chess (in-app)', web_app: { url: url } }]]
       };
     }
 
-    await ctx.reply(messageText, {
-      parse_mode: 'Markdown',
-      reply_markup: replyMarkup
-    });
+    await ctx.reply(messageText, { parse_mode: 'Markdown', reply_markup: replyMarkup });
   } catch (err) {
     console.error(err);
     ctx.reply('Sorry, could not create game. Please try again.');
   }
 });
 
-// Welcome message when bot joins a group
 bot.on('new_chat_members', (ctx) => {
   const newMember = ctx.message.new_chat_members.find(m => m.id === ctx.botInfo.id);
   if (newMember) {
@@ -211,7 +203,6 @@ bot.on('new_chat_members', (ctx) => {
 bot.launch();
 console.log(`Bot started. Mini App URL: ${BASE_URL}`);
 
-// ========== SERVER ==========
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
