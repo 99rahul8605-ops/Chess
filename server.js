@@ -336,7 +336,7 @@ app.post('/api/game/:gameId/resign', (req, res) => {
   });
 });
 
-// Cleanup
+// Cleanup every minute
 setInterval(() => {
   const now = Date.now();
   for (const [gameId, viewers] of activeViewers.entries()) {
@@ -439,12 +439,19 @@ bot.command('newgame', async (ctx) => {
         }
       });
     } else {
+      // Private chat: Play Now (web_app) + Game Link (Telegram Mini App deep link)
       await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '♟️ Play Now', web_app: { url: webAppUrl } }],
-            [{ text: '🔗 Game Link', url: webAppUrl }]
+            [{
+              text: '♟️ Play Now',
+              web_app: { url: webAppUrl }
+            }],
+            [{
+              text: '🔗 Game Link',
+              url: miniAppLink   // ✅ Uses t.me/...?startapp= link – opens inside Telegram
+            }]
           ]
         }
       });
@@ -477,7 +484,7 @@ You can also send the invitation to a group or channel. In that case, the first 
       inline_keyboard: [
         [{
           text: '📤 Send Game Invite',
-          switch_inline_query: ''  // Opens inline mode with empty query; user can then select 5/10 min
+          switch_inline_query: ''
         }]
       ]
     }
