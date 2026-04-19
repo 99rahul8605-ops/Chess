@@ -7,7 +7,11 @@ const cors = require('cors');
 
 // Optional Mongoose
 let mongoose = null;
-try { mongoose = require('mongoose'); } catch (e) { console.warn('⚠️ Mongoose not installed. User stats will be stored in memory.'); }
+try {
+  mongoose = require('mongoose');
+} catch (e) {
+  console.warn('⚠️ Mongoose not installed. User stats will be stored in memory (not persistent).');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -64,8 +68,9 @@ async function updateUserStats(userId, userInfo, result) {
   try {
     if (User) {
       let user = await User.findOne({ userId });
-      if (!user) user = new User({ userId, ...userInfo });
-      else {
+      if (!user) {
+        user = new User({ userId, ...userInfo });
+      } else {
         if (userInfo) {
           user.firstName = userInfo.firstName || user.firstName;
           user.lastName = userInfo.lastName || user.lastName;
@@ -82,7 +87,11 @@ async function updateUserStats(userId, userInfo, result) {
     } else {
       let stats = memoryStats.get(userId);
       if (!stats) {
-        stats = { userId, ...userInfo, stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } };
+        stats = {
+          userId,
+          ...userInfo,
+          stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 }
+        };
       }
       stats.stats.gamesPlayed += 1;
       if (result === 'win') stats.stats.wins += 1;
@@ -148,8 +157,8 @@ function getGameUrl(gameId) {
 }
 
 // ========== TIME CONTROL CONSTANTS ==========
-const DEFAULT_TIME_SEC = 10 * 60;
-const TIME_5_MIN = 5 * 60;
+const DEFAULT_TIME_SEC = 10 * 60;      // 10 minutes
+const TIME_5_MIN = 5 * 60;             // 5 minutes
 
 // ========== GAME STORAGE ==========
 const games = new Map();
@@ -294,11 +303,15 @@ app.get('/api/user/:userId/stats', async (req, res) => {
   try {
     if (User) {
       const user = await User.findOne({ userId: req.params.userId });
-      if (!user) return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+      if (!user) {
+        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+      }
       return res.json({ stats: user.stats });
     } else {
       const stats = memoryStats.get(req.params.userId);
-      if (!stats) return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+      if (!stats) {
+        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+      }
       return res.json({ stats: stats.stats });
     }
   } catch (err) {
@@ -311,7 +324,11 @@ app.post('/api/game/new', (req, res) => {
   let initialSec = DEFAULT_TIME_SEC;
   if (timeControl === 5) initialSec = TIME_5_MIN;
   const gameId = createNewGame(initialSec);
-  res.json({ gameId, url: getGameUrl(gameId), miniAppLink: BOT_USERNAME ? getMiniAppLink(gameId) : null });
+  res.json({
+    gameId,
+    url: getGameUrl(gameId),
+    miniAppLink: BOT_USERNAME ? getMiniAppLink(gameId) : null
+  });
 });
 
 app.post('/api/game/:gameId/join', (req, res) => {
@@ -326,14 +343,19 @@ app.post('/api/game/:gameId/join', (req, res) => {
   viewers.set(userId, { lastSeen: Date.now(), userInfo });
 
   if (game.assignedPlayers.has(userId)) {
-    return res.json({ color: game.assignedPlayers.get(userId), ...buildStateResponse(game, gameId) });
+    return res.json({
+      color: game.assignedPlayers.get(userId),
+      ...buildStateResponse(game, gameId)
+    });
   }
 
   if (game.assignedPlayers.size >= 2) {
     return res.json({ color: 'spectator', ...buildStateResponse(game, gameId) });
   }
 
-  if (!game.pendingPlayers.includes(userId)) game.pendingPlayers.push(userId);
+  if (!game.pendingPlayers.includes(userId)) {
+    game.pendingPlayers.push(userId);
+  }
 
   if (game.pendingPlayers.length >= 2) {
     const [playerA, playerB] = game.pendingPlayers;
@@ -358,7 +380,11 @@ app.post('/api/game/:gameId/join', (req, res) => {
     return res.json({ color, ...buildStateResponse(game, gameId) });
   }
 
-  res.json({ color: null, waitingForAssignment: true, ...buildStateResponse(game, gameId) });
+  res.json({
+    color: null,
+    waitingForAssignment: true,
+    ...buildStateResponse(game, gameId)
+  });
 });
 
 app.post('/api/game/:gameId/heartbeat', (req, res) => {
@@ -367,7 +393,9 @@ app.post('/api/game/:gameId/heartbeat', (req, res) => {
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   const viewers = activeViewers.get(gameId);
-  if (viewers) viewers.set(userId, { lastSeen: Date.now(), userInfo });
+  if (viewers) {
+    viewers.set(userId, { lastSeen: Date.now(), userInfo });
+  }
   res.json({ ok: true });
 });
 
@@ -380,7 +408,7 @@ function stateHandler(req, res) {
 app.get('/api/game/:gameId/state', stateHandler);
 app.get('/api/game/:gameId', stateHandler);
 
-app.post('/api/game/:gameId/move', (req, res) => {
+app.post('/api/game/:gameId/move', async (req, res) => {
   const { gameId } = req.params;
   const { userId, from, to, promotion } = req.body;
   if (!userId || !from || !to) return res.status(400).json({ error: 'userId, from, to required' });
@@ -395,7 +423,8 @@ app.post('/api/game/:gameId/move', (req, res) => {
 
   const c = chessCompat(game.chess);
   const currentTurn = c.turn();
-  if ((currentTurn === 'w' && playerColor !== 'white') || (currentTurn === 'b' && playerColor !== 'black')) {
+  if ((currentTurn === 'w' && playerColor !== 'white') ||
+      (currentTurn === 'b' && playerColor !== 'black')) {
     return res.status(403).json({ error: 'Not your turn' });
   }
 
@@ -404,7 +433,9 @@ app.post('/api/game/:gameId/move', (req, res) => {
   }
 
   const timeOutResult = checkTimeOut(game);
-  if (timeOutResult) return res.status(400).json({ error: 'Game already ended by timeout' });
+  if (timeOutResult) {
+    return res.status(400).json({ error: 'Game already ended by timeout' });
+  }
 
   try {
     const result = c.move({ from, to, promotion: promotion || 'q' });
@@ -412,8 +443,13 @@ app.post('/api/game/:gameId/move', (req, res) => {
 
     updateTimeAfterMove(game);
     game.lastMove = { from: result.from, to: result.to };
+    
     const response = { success: true, move: result, ...buildStateResponse(game, gameId) };
-    if (c.isGameOver()) await recordGameResult(game);
+    
+    if (c.isGameOver()) {
+      await recordGameResult(game);
+    }
+    
     res.json(response);
   } catch (err) {
     res.status(400).json({ error: 'Invalid move: ' + err.message });
@@ -446,7 +482,11 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
   
   await recordGameResult(game, winner);
   
-  res.json({ success: true, winner, ...buildStateResponse(game, gameId) });
+  res.json({
+    success: true,
+    winner,
+    ...buildStateResponse(game, gameId)
+  });
 });
 
 // ========== CHAT ENDPOINTS ==========
@@ -476,7 +516,13 @@ app.post('/api/game/:gameId/chat', (req, res) => {
   }
 
   const timestamp = Date.now();
-  const message = { userId, name, color, text: text.trim(), timestamp };
+  const message = {
+    userId,
+    name,
+    color,
+    text: text.trim(),
+    timestamp
+  };
 
   const messages = chatMessages.get(gameId) || [];
   messages.push(message);
@@ -500,9 +546,12 @@ setInterval(() => {
   const now = Date.now();
   for (const [gameId, viewers] of activeViewers.entries()) {
     for (const [userId, data] of viewers.entries()) {
-      if (now - data.lastSeen > 30000) viewers.delete(userId);
+      if (now - data.lastSeen > 30000) {
+        viewers.delete(userId);
+      }
     }
   }
+
   for (const [id, game] of games.entries()) {
     if (now - game.createdAt > 3600000) {
       games.delete(id);
@@ -533,16 +582,36 @@ bot.on('inline_query', async (ctx) => {
 
   await ctx.answerInlineQuery([
     {
-      type: 'article', id: gameId5, title: '♟️ Chess · 5 min', description: 'Blitz game – 5 minutes each',
+      type: 'article',
+      id: gameId5,
+      title: '♟️ Chess · 5 min',
+      description: 'Blitz game – 5 minutes each',
       thumbnail_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Chess_kdt45.svg/45px-Chess_kdt45.svg.png',
-      input_message_content: { message_text: `🎮 *Chess · 5 min*\n\nGame ID: \`${gameId5}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 5 min each\n\nTap below to play!`, parse_mode: 'Markdown' },
-      reply_markup: { inline_keyboard: [[{ text: '♟️ Play Chess', url: miniAppLink5 }]] }
+      input_message_content: {
+        message_text: `🎮 *Chess · 5 min*\n\nGame ID: \`${gameId5}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 5 min each\n\nTap below to play!`,
+        parse_mode: 'Markdown'
+      },
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '♟️ Play Chess', url: miniAppLink5 }
+        ]]
+      }
     },
     {
-      type: 'article', id: gameId10, title: '♟️ Chess · 10 min', description: 'Standard game – 10 minutes each',
+      type: 'article',
+      id: gameId10,
+      title: '♟️ Chess · 10 min',
+      description: 'Standard game – 10 minutes each',
       thumbnail_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Chess_kdt45.svg/45px-Chess_kdt45.svg.png',
-      input_message_content: { message_text: `🎮 *Chess · 10 min*\n\nGame ID: \`${gameId10}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 10 min each\n\nTap below to play!`, parse_mode: 'Markdown' },
-      reply_markup: { inline_keyboard: [[{ text: '♟️ Play Chess', url: miniAppLink10 }]] }
+      input_message_content: {
+        message_text: `🎮 *Chess · 10 min*\n\nGame ID: \`${gameId10}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: 10 min each\n\nTap below to play!`,
+        parse_mode: 'Markdown'
+      },
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '♟️ Play Chess', url: miniAppLink10 }
+        ]]
+      }
     }
   ], { cache_time: 0 });
 });
@@ -567,12 +636,24 @@ bot.command('newgame', async (ctx) => {
     const messageTextOut = `🎮 *New Chess Game · ${timeLabel}*\n\nGame ID: \`${gameId}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: ${timeLabel} each`;
 
     if (isGroup) {
-      await ctx.reply(messageTextOut, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '♟️ Play Chess', url: miniAppLink }]] } });
+      await ctx.reply(messageTextOut, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '♟️ Play Chess', url: miniAppLink }]
+          ]
+        }
+      });
     } else {
-      await ctx.reply(messageTextOut, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-        [{ text: '♟️ Play Now', web_app: { url: webAppUrl } }],
-        [{ text: '🔗 Game Link', url: miniAppLink }]
-      ]}});
+      await ctx.reply(messageTextOut, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '♟️ Play Now', web_app: { url: webAppUrl } }],
+            [{ text: '🔗 Game Link', url: miniAppLink }]
+          ]
+        }
+      });
     }
   } catch (err) {
     console.error('newgame error:', err);
@@ -583,14 +664,29 @@ bot.command('newgame', async (ctx) => {
 bot.start(async (ctx) => {
   const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
   if (isGroup) {
-    return ctx.reply(`♟️ *Chess Bot*\n\nUse /newgame to start a game in this group!`, { parse_mode: 'Markdown' });
+    return ctx.reply(
+      `♟️ *Chess Bot*\n\nUse /newgame to start a game in this group!`,
+      { parse_mode: 'Markdown' }
+    );
   }
+
   const inviteMessage = `👋 *Want to play chess with any contact from Telegram?*
 
 It's very easy to do so, click the button below or go to the chat which you want to send the invitation to, type in *@${BOT_USERNAME}* , and add a space.
 
 You can also send the invitation to a group or channel. In that case, the first person to click the 'Join' button will be your opponent.`;
-  await ctx.reply(inviteMessage, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '📤 Send Game Invite', switch_inline_query: '' }]] } });
+
+  await ctx.reply(inviteMessage, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [
+        [{
+          text: '📤 Send Game Invite',
+          switch_inline_query: ''
+        }]
+      ]
+    }
+  });
 });
 
 // ========== START ==========
