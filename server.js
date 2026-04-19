@@ -22,9 +22,7 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // ========== AUTO-FETCH BOT INFO ==========
-// Fetches both username and the Mini App short name from BotFather
 let BOT_USERNAME = null;
-let MINI_APP_NAME = null; // The short name you set in BotFather → Bot Menu / Web App
 
 async function fetchBotInfo() {
   try {
@@ -39,6 +37,20 @@ async function fetchBotInfo() {
   } catch (err) {
     console.error('❌ Could not fetch bot info:', err.message);
   }
+}
+
+// ========== MINI APP LINK ==========
+// Format: https://t.me/BOT_USERNAME/APP_SHORT_NAME?startapp=GAMEID
+// BOT_USERNAME → auto-fetched from Telegram API
+// APP_SHORT_NAME → set via MINI_APP_SHORT_NAME in .env (from BotFather /newapp)
+const APP_SHORT_NAME = process.env.MINI_APP_SHORT_NAME || 'appnane'; // ← your BotFather short name
+
+function getMiniAppLink(gameId) {
+  return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${gameId}`;
+}
+
+function getGameUrl(gameId) {
+  return `${BASE_URL}/?game=${gameId}`;
 }
 
 // ========== GAME STORAGE ==========
@@ -56,33 +68,15 @@ function createNewGame() {
   return gameId;
 }
 
-function getGameUrl(gameId) {
-  return `${BASE_URL}/?game=${gameId}`;
-}
-
-// ========================================
-// MINI APP DIRECT LINK
-// Format: https://t.me/BotUsername/AppShortName?startapp=PAYLOAD
-//
-// How to set this up in BotFather:
-//   1. /newapp  (or /myapps → your bot → Edit → Web App)
-//   2. Set the Web App URL to your BASE_URL
-//   3. Give it a short name e.g. "game"
-//   4. Then your link becomes: https://t.me/YourBot/game?startapp=GAMEID
-//
-// The Mini App receives the gameId via:
-//   Telegram.WebApp.initDataUnsafe.start_param
-// ========================================
-function getMiniAppLink(gameId) {
-  const appName = process.env.MINI_APP_SHORT_NAME || 'game'; // set in .env
-  return `https://t.me/${BOT_USERNAME}/${appName}?startapp=${gameId}`;
-}
-
 // ========== API ROUTES ==========
 
 app.post('/api/game/new', (req, res) => {
   const gameId = createNewGame();
-  res.json({ gameId, url: getGameUrl(gameId), miniAppLink: BOT_USERNAME ? getMiniAppLink(gameId) : null });
+  res.json({
+    gameId,
+    url: getGameUrl(gameId),
+    miniAppLink: BOT_USERNAME ? getMiniAppLink(gameId) : null
+  });
 });
 
 app.get('/api/game/:gameId', (req, res) => {
@@ -147,7 +141,12 @@ app.post('/api/game/:gameId/move', (req, res) => {
   try {
     const result = game.chess.move(move);
     if (!result) return res.status(400).json({ error: 'Invalid move' });
-    res.json({ success: true, move: result, fen: game.chess.fen(), isGameOver: game.chess.isGameOver() });
+    res.json({
+      success: true,
+      move: result,
+      fen: game.chess.fen(),
+      isGameOver: game.chess.isGameOver()
+    });
   } catch (err) {
     res.status(400).json({ error: 'Invalid move: ' + err.message });
   }
@@ -164,18 +163,13 @@ setInterval(() => {
 // ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
-// ==========================================
-// INLINE MODE
-// When user types "@YourBot" in any chat,
-// bot returns an inline result with a
-// Mini App button — works in groups too!
-//
-// To enable: BotFather → /setinline → set placeholder text
-// ==========================================
+// -----------------------------------------------
+// INLINE MODE — user types @Cheeeesssssbot in any
+// chat/group → picks result → sends Mini App button
+// Enable in BotFather: /setinline
+// -----------------------------------------------
 bot.on('inline_query', async (ctx) => {
   const gameId = createNewGame();
-  const miniAppLink = getMiniAppLink(gameId);
-  const gameUrl = getGameUrl(gameId);
 
   await ctx.answerInlineQuery([
     {
@@ -183,40 +177,39 @@ bot.on('inline_query', async (ctx) => {
       id: gameId,
       title: '♟️ Start a Chess Game',
       description: 'Send a chess game invite to this chat',
+      thumbnail_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Chess_kdt45.svg/45px-Chess_kdt45.svg.png',
       input_message_content: {
         message_text: `🎮 *Chess Game Challenge!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black\n\nTap below to play!`,
         parse_mode: 'Markdown'
       },
-      // ✅ This button works in groups via inline mode!
+      // ✅ url button with t.me/Bot/App?startapp= works in groups!
       reply_markup: {
         inline_keyboard: [[
-          { text: '♟️ Play Chess', url: miniAppLink }
+          { text: '♟️ Play Chess', url: getMiniAppLink(gameId) }
         ]]
-      },
-      thumbnail_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Chess_kdt45.svg/45px-Chess_kdt45.svg.png'
+      }
     }
   ], { cache_time: 0 });
 });
 
-// /newgame command
+// -----------------------------------------------
+// /newgame COMMAND
+// -----------------------------------------------
 bot.command('newgame', async (ctx) => {
   try {
     const gameId = createNewGame();
-    const miniAppLink = getMiniAppLink(gameId);
-    const gameUrl = getGameUrl(gameId);
     const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
 
     if (isGroup) {
-      // ✅ In groups: use the t.me/Bot/AppName?startapp= link
-      // This opens the Mini App directly — no redirect needed!
+      // ✅ t.me/Bot/App?startapp= link works as a url button in groups
       await ctx.reply(
         `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black`,
         {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
-              [{ text: '♟️ Play Chess (Mini App)', url: miniAppLink }],
-              [{ text: '🌐 Open in Browser', url: gameUrl }]
+              [{ text: '♟️ Play Chess (Mini App)', url: getMiniAppLink(gameId) }],
+              [{ text: '🌐 Open in Browser', url: getGameUrl(gameId) }]
             ]
           }
         }
@@ -229,7 +222,7 @@ bot.command('newgame', async (ctx) => {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [[
-              { text: '♟️ Open Chess Board', web_app: { url: gameUrl } }
+              { text: '♟️ Open Chess Board', web_app: { url: getGameUrl(gameId) } }
             ]]
           }
         }
@@ -243,7 +236,7 @@ bot.command('newgame', async (ctx) => {
 
 bot.start(async (ctx) => {
   await ctx.reply(
-    '♟️ *Chess Bot*\n\nUse /newgame to start a game here.\nOr type @' + (BOT_USERNAME || 'me') + ' in any group chat to send a game invite!',
+    `♟️ *Chess Bot*\n\nUse /newgame to start a game.\nOr type @${BOT_USERNAME || 'me'} in any group to send an invite!`,
     { parse_mode: 'Markdown' }
   );
 });
@@ -251,7 +244,7 @@ bot.start(async (ctx) => {
 // ========== START ==========
 app.listen(PORT, async () => {
   console.log(`✅ Server running on port ${PORT}`);
-  await fetchBotInfo();
+  await fetchBotInfo(); // Auto-fetch @Cheeeesssssbot username
   bot.launch()
     .then(() => console.log('✅ Bot online!'))
     .catch((err) => console.error('❌ Bot error:', err.message));
