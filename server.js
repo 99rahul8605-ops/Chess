@@ -4,14 +4,13 @@ const { Telegraf } = require('telegraf');
 const { Chess } = require('chess.js');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Force HTTPS for Telegram WebApp (except localhost)
+// Force HTTPS for Telegram WebApp (Telegram requires HTTPS for Mini Apps)
 if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_URL.includes('127.0.0.1')) {
   BASE_URL = BASE_URL.replace('http://', 'https://');
 }
@@ -144,85 +143,54 @@ setInterval(() => {
 // ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
-// Helper to detect /newgame command (with or without @botname)
-function isNewGameCommand(text) {
-  if (!text) return false;
-  const normalized = text.toLowerCase().trim();
-  return normalized === '/newgame' || normalized.startsWith('/newgame@');
-}
-
 async function createGame(ctx) {
   try {
+    // Note: Calling your own API works, but in production, you could just call the logic directly
     const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
     const { gameId, url } = await response.json();
 
-    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick below to join. First player gets White, second gets Black.`;
+    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick below to join the game.`;
     
-    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-    let replyMarkup;
-    if (isGroup) {
-      // Groups: regular URL button (opens in browser)
-      replyMarkup = {
-        inline_keyboard: [[{ text: '♟️ Join Game', url }]]
-      };
-    } else {
-      // Private chat: WebApp button (opens inside Telegram)
-      replyMarkup = {
-        inline_keyboard: [[{ text: '♟️ Play Chess (in-app)', web_app: { url } }]]
-      };
-    }
+    // FIX: This now uses web_app for both groups and private chats
+    const replyMarkup = {
+      inline_keyboard: [
+        [{ text: '♟️ Play Chess', web_app: { url: url } }]
+      ]
+    };
     
-    await ctx.reply(messageText, { parse_mode: 'Markdown', reply_markup: replyMarkup });
+    await ctx.reply(messageText, { 
+      parse_mode: 'Markdown', 
+      reply_markup: replyMarkup 
+    });
   } catch (err) {
     console.error('Create game error:', err);
-    ctx.reply('Sorry, could not create game. Please try again.');
+    ctx.reply('Sorry, could not create game. Please check if the server is running.');
   }
 }
 
 bot.start((ctx) => {
-  const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-  if (isGroup) {
-    ctx.reply(
-      '♟️ *Chess Bot ready!*\nSend /newgame to create a game.\n\nFirst player to click the button gets White, second gets Black.\n\n⚠️ Privacy mode must be disabled (ask admin to set /setprivacy with @BotFather).',
-      { parse_mode: 'Markdown' }
-    );
-  } else {
-    ctx.reply(
-      '♟️ *Multiplayer Chess Mini App* ♞\n\n' +
-      'Use /newgame to create a chess game and invite a friend.\n' +
-      'Both players click the same button – colors assigned automatically.\n\n' +
-      'The game opens inside Telegram (Mini App).',
-      { parse_mode: 'Markdown' }
-    );
-  }
+  ctx.reply(
+    '♟️ *Multiplayer Chess Mini App*\n\n' +
+    'Use /newgame to create a chess game.\n' +
+    'The game will open as a Mini App directly inside Telegram.',
+    { parse_mode: 'Markdown' }
+  );
 });
 
-// Handle /newgame command
 bot.command('newgame', async (ctx) => {
   await createGame(ctx);
 });
 
-// Also handle text messages in groups (in case command is typed without slash or with @mention)
-bot.on('text', async (ctx) => {
-  if (!ctx.chat || !ctx.message || !ctx.message.text) return;
-  const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-  if (isGroup && isNewGameCommand(ctx.message.text)) {
-    await createGame(ctx);
-  }
-});
-
+// Handle new members to show instructions
 bot.on('new_chat_members', (ctx) => {
-  const newMember = ctx.message.new_chat_members.find(m => m.id === ctx.botInfo.id);
-  if (newMember) {
-    ctx.reply(
-      '👋 Hello! I am a Chess bot.\n\nSend /newgame to create a game.\n\n⚠️ Make sure my privacy mode is disabled (ask the group admin to set /setprivacy with @BotFather).',
-      { parse_mode: 'Markdown' }
-    );
+  const isBotAdded = ctx.message.new_chat_members.find(m => m.id === ctx.botInfo.id);
+  if (isBotAdded) {
+    ctx.reply('👋 I am ready! Send /newgame to start a match in this group.');
   }
 });
 
 bot.launch();
-console.log(`Bot started. Mini App URL: ${BASE_URL}`);
+console.log(`Bot running. Base URL: ${BASE_URL}`);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
