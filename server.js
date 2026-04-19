@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Force HTTPS for Telegram WebApp (Telegram requires HTTPS for Mini Apps)
+// Force HTTPS for Telegram WebApp
 if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_URL.includes('127.0.0.1')) {
   BASE_URL = BASE_URL.replace('http://', 'https://');
 }
@@ -145,16 +145,27 @@ const bot = new Telegraf(BOT_TOKEN);
 
 async function createGame(ctx) {
   try {
-    // Note: Calling your own API works, but in production, you could just call the logic directly
+    // Call the internal API to initialize a game
     const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
+    if (!response.ok) throw new Error('API server unreachable');
+    
     const { gameId, url } = await response.json();
 
-    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick below to join the game.`;
+    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick below to join.`;
     
-    // FIX: This now uses web_app for both groups and private chats
+    // Check if it is a group/supergroup
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+
     const replyMarkup = {
       inline_keyboard: [
-        [{ text: '♟️ Play Chess', web_app: { url: url } }]
+        [
+          { 
+            text: '♟️ Play Chess', 
+            // Groups get a 'url' button, Private gets a 'web_app' button
+            // This prevents the BUTTON_TYPE_INVALID error
+            ...(isGroup ? { url: url } : { web_app: { url: url } })
+          }
+        ]
       ]
     };
     
@@ -164,36 +175,29 @@ async function createGame(ctx) {
     });
   } catch (err) {
     console.error('Create game error:', err);
-    ctx.reply('Sorry, could not create game. Please check if the server is running.');
+    // Don't let the bot crash on error
+    try {
+      await ctx.reply('⚠️ Failed to create game. Ensure the server BASE_URL is correct and reachable.');
+    } catch (e) {}
   }
 }
 
 bot.start((ctx) => {
-  ctx.reply(
-    '♟️ *Multiplayer Chess Mini App*\n\n' +
-    'Use /newgame to create a chess game.\n' +
-    'The game will open as a Mini App directly inside Telegram.',
-    { parse_mode: 'Markdown' }
-  );
+  ctx.reply('♟️ *Chess Mini App ready!* Send /newgame to start.', { parse_mode: 'Markdown' });
 });
 
 bot.command('newgame', async (ctx) => {
   await createGame(ctx);
 });
 
-// Handle new members to show instructions
-bot.on('new_chat_members', (ctx) => {
-  const isBotAdded = ctx.message.new_chat_members.find(m => m.id === ctx.botInfo.id);
-  if (isBotAdded) {
-    ctx.reply('👋 I am ready! Send /newgame to start a match in this group.');
-  }
-});
-
-bot.launch();
-console.log(`Bot running. Base URL: ${BASE_URL}`);
-
+// Start Express first
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Launch Bot after server is up
+  bot.launch()
+    .then(() => console.log('Bot successfully launched!'))
+    .catch((err) => console.error('Bot launch failed:', err));
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
