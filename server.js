@@ -39,13 +39,26 @@ async function fetchBotInfo() {
   }
 }
 
-// ========== MINI APP LINK ==========
-// Format: https://t.me/BOT_USERNAME/APP_SHORT_NAME?startapp=GAMEID
-// BOT_USERNAME → auto-fetched from Telegram API
-// APP_SHORT_NAME → set via MINI_APP_SHORT_NAME in .env (from BotFather /newapp)
-const APP_SHORT_NAME = process.env.MINI_APP_SHORT_NAME || 'appnane'; // ← your BotFather short name
+// ========== MINI APP SHORT NAME ==========
+// Safely extract just the short name from whatever is in env.
+// Handles all these cases correctly:
+//   "appnane"                              → "appnane" ✅
+//   "http://t.me/Cheeeesssssbot/appnane"   → "appnane" ✅
+//   "https://t.me/Cheeeesssssbot/appnane"  → "appnane" ✅
+//   "t.me/Cheeeesssssbot/appnane"          → "appnane" ✅
+function extractShortName(value) {
+  if (!value) return 'game';
+  // If it contains a slash, take the last segment
+  const trimmed = value.trim().replace(/\/$/, '');
+  const parts = trimmed.split('/');
+  return parts[parts.length - 1];
+}
+
+const APP_SHORT_NAME = extractShortName(process.env.MINI_APP_SHORT_NAME);
+console.log(`🎮 Mini App short name: ${APP_SHORT_NAME}`);
 
 function getMiniAppLink(gameId) {
+  // Correct format: https://t.me/BotUsername/AppShortName?startapp=GAMEID
   return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${gameId}`;
 }
 
@@ -141,12 +154,7 @@ app.post('/api/game/:gameId/move', (req, res) => {
   try {
     const result = game.chess.move(move);
     if (!result) return res.status(400).json({ error: 'Invalid move' });
-    res.json({
-      success: true,
-      move: result,
-      fen: game.chess.fen(),
-      isGameOver: game.chess.isGameOver()
-    });
+    res.json({ success: true, move: result, fen: game.chess.fen(), isGameOver: game.chess.isGameOver() });
   } catch (err) {
     res.status(400).json({ error: 'Invalid move: ' + err.message });
   }
@@ -163,14 +171,9 @@ setInterval(() => {
 // ========== TELEGRAM BOT ==========
 const bot = new Telegraf(BOT_TOKEN);
 
-// -----------------------------------------------
-// INLINE MODE — user types @Cheeeesssssbot in any
-// chat/group → picks result → sends Mini App button
-// Enable in BotFather: /setinline
-// -----------------------------------------------
+// Inline mode — @Cheeeesssssbot in any chat
 bot.on('inline_query', async (ctx) => {
   const gameId = createNewGame();
-
   await ctx.answerInlineQuery([
     {
       type: 'article',
@@ -182,7 +185,6 @@ bot.on('inline_query', async (ctx) => {
         message_text: `🎮 *Chess Game Challenge!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black\n\nTap below to play!`,
         parse_mode: 'Markdown'
       },
-      // ✅ url button with t.me/Bot/App?startapp= works in groups!
       reply_markup: {
         inline_keyboard: [[
           { text: '♟️ Play Chess', url: getMiniAppLink(gameId) }
@@ -192,16 +194,13 @@ bot.on('inline_query', async (ctx) => {
   ], { cache_time: 0 });
 });
 
-// -----------------------------------------------
-// /newgame COMMAND
-// -----------------------------------------------
+// /newgame command
 bot.command('newgame', async (ctx) => {
   try {
     const gameId = createNewGame();
     const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
 
     if (isGroup) {
-      // ✅ t.me/Bot/App?startapp= link works as a url button in groups
       await ctx.reply(
         `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black`,
         {
@@ -215,7 +214,6 @@ bot.command('newgame', async (ctx) => {
         }
       );
     } else {
-      // Private chat — web_app button works directly
       await ctx.reply(
         `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black`,
         {
@@ -244,7 +242,7 @@ bot.start(async (ctx) => {
 // ========== START ==========
 app.listen(PORT, async () => {
   console.log(`✅ Server running on port ${PORT}`);
-  await fetchBotInfo(); // Auto-fetch @Cheeeesssssbot username
+  await fetchBotInfo();
   bot.launch()
     .then(() => console.log('✅ Bot online!'))
     .catch((err) => console.error('❌ Bot error:', err.message));
