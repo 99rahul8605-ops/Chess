@@ -78,7 +78,7 @@
   tg.expand();
   tg.ready();
 
-  // Get user ID – fallback if not available (e.g., opened in browser)
+  // Get user ID – fallback if not available
   const user = tg.initDataUnsafe?.user;
   let userId = user ? user.id.toString() : null;
   if (!userId) {
@@ -100,13 +100,13 @@
   }
 
   let myColor = null;
-  let selectedSquare = null;
-  let boardState = null;
-  let lastMove = null;
+  let selectedSquare = null; // stored as internal coordinates (White perspective)
+  let boardState = null;     // internal board (White perspective)
+  let lastMove = null;       // { from, to } in algebraic
   let updateInterval = null;
   let waitingForOpponent = true;
 
-  // --- Piece SVG (same as before) ---
+  // --- Piece SVG (unchanged) ---
   function mkPiece(type, isWhite) {
     const f = isWhite ? '#ffffff' : '#1c1c1c';
     const f2 = isWhite ? '#ddd0b8' : '#333333';
@@ -152,6 +152,22 @@
          '<rect x="9.5" y="31"   width="26" height="4.5" rx="2.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'
     };
     return `<svg viewBox="0 0 45 45" xmlns="http://www.w3.org/2000/svg">${s[type] || ''}</svg>`;
+  }
+
+  // Convert internal (White perspective) coordinates to display coordinates
+  function internalToDisplay(row, col) {
+    if (myColor === 'black') {
+      return { row: 7 - row, col: 7 - col };
+    }
+    return { row, col };
+  }
+
+  // Convert display coordinates to internal (White perspective)
+  function displayToInternal(row, col) {
+    if (myColor === 'black') {
+      return { row: 7 - row, col: 7 - col };
+    }
+    return { row, col };
   }
 
   function fenToBoard(fen) {
@@ -215,13 +231,13 @@
     } catch (err) {}
   }
 
-  async function makeMove(fromRow, fromCol, toRow, toCol) {
+  async function makeMove(fromInternal, toInternal) {
     if (waitingForOpponent) {
       document.getElementById('status').textContent = 'Waiting for opponent to join...';
       return;
     }
-    const from = coordToAlgebraic(fromRow, fromCol);
-    const to = coordToAlgebraic(toRow, toCol);
+    const from = coordToAlgebraic(fromInternal.row, fromInternal.col);
+    const to = coordToAlgebraic(toInternal.row, toInternal.col);
     try {
       const res = await fetch(`/api/game/${gameId}/move`, {
         method: 'POST',
@@ -283,50 +299,80 @@
     }
   }
 
+  // Render board from White perspective, but flipped for Black player
   function renderBoard() {
     const boardEl = document.getElementById('board');
     boardEl.innerHTML = '';
     if (!boardState) return;
-    for (let i = 0; i < 8; i++) {
-      for (let j = 0; j < 8; j++) {
+
+    for (let displayRow = 0; displayRow < 8; displayRow++) {
+      for (let displayCol = 0; displayCol < 8; displayCol++) {
+        const internal = displayToInternal(displayRow, displayCol);
+        const piece = boardState[internal.row][internal.col];
         const cell = document.createElement('div');
-        cell.className = `cell ${(i+j)%2===0 ? 'light' : 'dark'}`;
+        cell.className = `cell ${((displayRow + displayCol) % 2 === 0) ? 'light' : 'dark'}`;
+
+        // Highlight last move (convert lastMove algebraic to internal, then to display)
         if (lastMove) {
-          const [fRow, fCol] = [8-parseInt(lastMove.from[1]), lastMove.from.charCodeAt(0)-97];
-          const [tRow, tCol] = [8-parseInt(lastMove.to[1]), lastMove.to.charCodeAt(0)-97];
-          if ((i===fRow && j===fCol) || (i===tRow && j===tCol)) cell.classList.add('last-move-hi');
+          const lastFromInternal = {
+            row: 8 - parseInt(lastMove.from[1]),
+            col: lastMove.from.charCodeAt(0) - 97
+          };
+          const lastToInternal = {
+            row: 8 - parseInt(lastMove.to[1]),
+            col: lastMove.to.charCodeAt(0) - 97
+          };
+          const lastFromDisplay = internalToDisplay(lastFromInternal.row, lastFromInternal.col);
+          const lastToDisplay = internalToDisplay(lastToInternal.row, lastToInternal.col);
+          if ((displayRow === lastFromDisplay.row && displayCol === lastFromDisplay.col) ||
+              (displayRow === lastToDisplay.row && displayCol === lastToDisplay.col)) {
+            cell.classList.add('last-move-hi');
+          }
         }
-        if (selectedSquare && selectedSquare.row===i && selectedSquare.col===j) cell.classList.add('selected');
-        const piece = boardState[i][j];
+
+        // Highlight selected square (selected is stored in internal coordinates)
+        if (selectedSquare) {
+          const selectedDisplay = internalToDisplay(selectedSquare.row, selectedSquare.col);
+          if (displayRow === selectedDisplay.row && displayCol === selectedDisplay.col) {
+            cell.classList.add('selected');
+          }
+        }
+
         if (piece) {
           const isWhite = piece === piece.toUpperCase() && piece !== piece.toLowerCase();
           cell.innerHTML = mkPiece(piece.toUpperCase(), isWhite);
         }
-        cell.onclick = () => onCellClick(i, j);
+
+        // Store internal coordinates in closure for click handler
+        cell.onclick = (() => {
+          const intCoord = internal;
+          return () => onCellClick(intCoord.row, intCoord.col);
+        })();
+
         boardEl.appendChild(cell);
       }
     }
   }
 
-  function onCellClick(row, col) {
+  function onCellClick(internalRow, internalCol) {
     if (!myColor || myColor === 'spectator') return;
     if (waitingForOpponent) {
       document.getElementById('status').textContent = 'Waiting for opponent...';
       return;
     }
-    const piece = boardState[row][col];
+    const piece = boardState[internalRow][internalCol];
     if (selectedSquare === null) {
       if (piece) {
         const pieceIsWhite = piece === piece.toUpperCase() && piece !== piece.toLowerCase();
         const myColorIsWhite = myColor === 'white';
         if ((myColorIsWhite && pieceIsWhite) || (!myColorIsWhite && !pieceIsWhite)) {
-          selectedSquare = { row, col };
+          selectedSquare = { row: internalRow, col: internalCol };
           renderBoard();
           tg.HapticFeedback.selectionChanged();
         }
       }
     } else {
-      makeMove(selectedSquare.row, selectedSquare.col, row, col);
+      makeMove(selectedSquare, { row: internalRow, col: internalCol });
     }
   }
 
