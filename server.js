@@ -21,6 +21,22 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// ========== CHESS.JS VERSION COMPAT ==========
+// v0.x: chess.game_over(), chess.in_checkmate(), chess.in_stalemate(), chess.in_draw(), chess.in_check()
+// v1.x: chess.isGameOver(), chess.isCheckmate(), chess.isStalemate(), chess.isDraw(), chess.inCheck()
+function chessCompat(chess) {
+  return {
+    isGameOver:  () => typeof chess.isGameOver  === 'function' ? chess.isGameOver()  : chess.game_over(),
+    isCheckmate: () => typeof chess.isCheckmate === 'function' ? chess.isCheckmate() : chess.in_checkmate(),
+    isStalemate: () => typeof chess.isStalemate === 'function' ? chess.isStalemate() : chess.in_stalemate(),
+    isDraw:      () => typeof chess.isDraw      === 'function' ? chess.isDraw()      : chess.in_draw(),
+    inCheck:     () => typeof chess.inCheck     === 'function' ? chess.inCheck()     : chess.in_check(),
+    turn:        () => chess.turn(),
+    fen:         () => chess.fen(),
+    move:        (m) => chess.move(m),
+  };
+}
+
 // ========== AUTO-FETCH BOT INFO ==========
 let BOT_USERNAME = null;
 
@@ -67,28 +83,32 @@ function createNewGame() {
     whiteUserId: null,
     blackUserId: null,
     players: new Map(),
-    lastMove: null,       // { from, to } in algebraic e.g. { from: 'e2', to: 'e4' }
+    lastMove: null,
     createdAt: Date.now()
   });
   return gameId;
 }
 
-// Build full game state response — used by both /join and /state
 function buildStateResponse(game) {
-  const chess = game.chess;
+  const c = chessCompat(game.chess);
+  const gameOver  = c.isGameOver();
+  const checkmate = c.isCheckmate();
+  const stalemate = c.isStalemate();
+  const draw      = c.isDraw();
+  const inCheck   = c.inCheck();
+  const turn      = c.turn();
+
   return {
-    fen: chess.fen(),
-    turn: chess.turn(),
-    lastMove: game.lastMove,
+    fen:               c.fen(),
+    turn,
+    lastMove:          game.lastMove,
     waitingForOpponent: !(game.whiteUserId && game.blackUserId),
-    isGameOver: chess.isGameOver(),
-    isCheckmate: chess.isCheckmate(),
-    isStalemate: chess.isStalemate(),
-    isDraw: chess.isDraw(),
-    inCheck: chess.inCheck(),
-    winner: chess.isCheckmate()
-      ? (chess.turn() === 'w' ? 'black' : 'white')
-      : null
+    isGameOver:        gameOver,
+    isCheckmate:       checkmate,
+    isStalemate:       stalemate,
+    isDraw:            draw,
+    inCheck,
+    winner: checkmate ? (turn === 'w' ? 'black' : 'white') : null
   };
 }
 
@@ -103,7 +123,6 @@ app.post('/api/game/new', (req, res) => {
   });
 });
 
-// JOIN — assigns color and returns full state
 app.post('/api/game/:gameId/join', (req, res) => {
   const { gameId } = req.params;
   const { userId } = req.body;
@@ -112,7 +131,6 @@ app.post('/api/game/:gameId/join', (req, res) => {
   const game = games.get(gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
 
-  // Already joined — return existing color + state
   if (game.players.has(userId)) {
     return res.json({ color: game.players.get(userId), ...buildStateResponse(game) });
   }
@@ -135,9 +153,6 @@ app.post('/api/game/:gameId/join', (req, res) => {
   res.json({ color: assignedColor, ...buildStateResponse(game) });
 });
 
-// STATE — polled every second by frontend
-// Supports both GET /api/game/:gameId/state?userId=xxx
-// and      GET /api/game/:gameId  (legacy)
 function stateHandler(req, res) {
   const game = games.get(req.params.gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
@@ -147,7 +162,6 @@ function stateHandler(req, res) {
 app.get('/api/game/:gameId/state', stateHandler);
 app.get('/api/game/:gameId', stateHandler);
 
-// MOVE
 app.post('/api/game/:gameId/move', (req, res) => {
   const { gameId } = req.params;
   const { userId, from, to, promotion } = req.body;
@@ -161,7 +175,8 @@ app.post('/api/game/:gameId/move', (req, res) => {
     return res.status(403).json({ error: 'You are not a player in this game' });
   }
 
-  const currentTurn = game.chess.turn();
+  const c = chessCompat(game.chess);
+  const currentTurn = c.turn();
   if ((currentTurn === 'w' && playerColor !== 'white') ||
       (currentTurn === 'b' && playerColor !== 'black')) {
     return res.status(403).json({ error: 'Not your turn' });
@@ -172,12 +187,9 @@ app.post('/api/game/:gameId/move', (req, res) => {
   }
 
   try {
-    const result = game.chess.move({ from, to, promotion: promotion || 'q' });
+    const result = c.move({ from, to, promotion: promotion || 'q' });
     if (!result) return res.status(400).json({ error: 'Invalid move' });
-
-    // Save last move for frontend highlighting
     game.lastMove = { from: result.from, to: result.to };
-
     res.json({ success: true, move: result, ...buildStateResponse(game) });
   } catch (err) {
     res.status(400).json({ error: 'Invalid move: ' + err.message });
