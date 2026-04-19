@@ -22,8 +22,6 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // ========== CHESS.JS VERSION COMPAT ==========
-// v0.x: chess.game_over(), chess.in_checkmate(), chess.in_stalemate(), chess.in_draw(), chess.in_check()
-// v1.x: chess.isGameOver(), chess.isCheckmate(), chess.isStalemate(), chess.isDraw(), chess.inCheck()
 function chessCompat(chess) {
   return {
     isGameOver:  () => typeof chess.isGameOver  === 'function' ? chess.isGameOver()  : chess.game_over(),
@@ -66,6 +64,7 @@ const APP_SHORT_NAME = extractShortName(process.env.MINI_APP_SHORT_NAME);
 console.log(`🎮 Mini App short name: ${APP_SHORT_NAME}`);
 
 function getMiniAppLink(gameId) {
+  if (!BOT_USERNAME) return null;
   return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${gameId}`;
 }
 
@@ -73,42 +72,91 @@ function getGameUrl(gameId) {
   return `${BASE_URL}/?game=${gameId}`;
 }
 
+// ========== TIME CONTROL CONSTANTS ==========
+const INITIAL_TIME_SEC = 10 * 60; // 10 minutes per player
+
 // ========== GAME STORAGE ==========
 const games = new Map();
 
 function createNewGame() {
   const gameId = uuidv4().slice(0, 8);
+  const now = Date.now();
   games.set(gameId, {
     chess: new Chess(),
     whiteUserId: null,
     blackUserId: null,
     players: new Map(),
     lastMove: null,
-    createdAt: Date.now()
+    createdAt: now,
+    // Time control fields
+    whiteTime: INITIAL_TIME_SEC,
+    blackTime: INITIAL_TIME_SEC,
+    lastMoveTimestamp: now,       // when the last move was made (or game start)
+    gameOverByTime: false,
   });
   return gameId;
 }
 
+// Helper to update time for the player who just moved
+function updateTimeAfterMove(game) {
+  const now = Date.now();
+  const elapsedSec = (now - game.lastMoveTimestamp) / 1000;
+  const turn = game.chess.turn(); // after move, turn is opposite of who just moved
+  if (turn === 'w') {
+    // Black just moved
+    game.blackTime = Math.max(0, game.blackTime - elapsedSec);
+  } else {
+    // White just moved
+    game.whiteTime = Math.max(0, game.whiteTime - elapsedSec);
+  }
+  game.lastMoveTimestamp = now;
+}
+
+function checkTimeOut(game) {
+  if (game.whiteTime <= 0) {
+    game.gameOverByTime = true;
+    return { winner: 'black', reason: 'timeout' };
+  }
+  if (game.blackTime <= 0) {
+    game.gameOverByTime = true;
+    return { winner: 'white', reason: 'timeout' };
+  }
+  return null;
+}
+
 function buildStateResponse(game) {
   const c = chessCompat(game.chess);
-  const gameOver  = c.isGameOver();
-  const checkmate = c.isCheckmate();
-  const stalemate = c.isStalemate();
-  const draw      = c.isDraw();
-  const inCheck   = c.inCheck();
-  const turn      = c.turn();
+  let gameOver = c.isGameOver() || game.gameOverByTime;
+  let checkmate = c.isCheckmate();
+  let stalemate = c.isStalemate();
+  let draw = c.isDraw();
+  let inCheck = c.inCheck();
+  let turn = c.turn();
+  let winner = null;
+
+  // Check time out first
+  const timeOutResult = checkTimeOut(game);
+  if (timeOutResult) {
+    gameOver = true;
+    winner = timeOutResult.winner;
+  } else if (checkmate) {
+    winner = turn === 'w' ? 'black' : 'white';
+  }
 
   return {
-    fen:               c.fen(),
+    fen: c.fen(),
     turn,
-    lastMove:          game.lastMove,
+    lastMove: game.lastMove,
     waitingForOpponent: !(game.whiteUserId && game.blackUserId),
-    isGameOver:        gameOver,
-    isCheckmate:       checkmate,
-    isStalemate:       stalemate,
-    isDraw:            draw,
+    isGameOver: gameOver,
+    isCheckmate: checkmate,
+    isStalemate: stalemate,
+    isDraw: draw,
     inCheck,
-    winner: checkmate ? (turn === 'w' ? 'black' : 'white') : null
+    winner,
+    whiteTime: game.whiteTime,
+    blackTime: game.blackTime,
+    lastMoveTimestamp: game.lastMoveTimestamp,
   };
 }
 
@@ -186,9 +234,19 @@ app.post('/api/game/:gameId/move', (req, res) => {
     return res.status(400).json({ error: 'Waiting for opponent to join' });
   }
 
+  // Check time out before move
+  const timeOutResult = checkTimeOut(game);
+  if (timeOutResult) {
+    return res.status(400).json({ error: 'Game already ended by timeout' });
+  }
+
   try {
     const result = c.move({ from, to, promotion: promotion || 'q' });
     if (!result) return res.status(400).json({ error: 'Invalid move' });
+
+    // Update time for the player who just moved
+    updateTimeAfterMove(game);
+
     game.lastMove = { from: result.from, to: result.to };
     res.json({ success: true, move: result, ...buildStateResponse(game) });
   } catch (err) {
@@ -208,21 +266,33 @@ setInterval(() => {
 const bot = new Telegraf(BOT_TOKEN);
 
 bot.on('inline_query', async (ctx) => {
+  // Ensure bot username is available
+  if (!BOT_USERNAME) {
+    console.warn('Inline query received before BOT_USERNAME fetched');
+    return await ctx.answerInlineQuery([], { cache_time: 0 });
+  }
+
   const gameId = createNewGame();
+  const miniAppLink = getMiniAppLink(gameId);
+  if (!miniAppLink) {
+    console.error('Failed to generate mini app link');
+    return await ctx.answerInlineQuery([], { cache_time: 0 });
+  }
+
   await ctx.answerInlineQuery([
     {
       type: 'article',
       id: gameId,
-      title: '♟️ Start a Chess Game',
-      description: 'Send a chess game invite to this chat',
+      title: '♟️ Start a Chess Game (10 min)',
+      description: 'Send a timed chess game invite to this chat',
       thumbnail_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Chess_kdt45.svg/45px-Chess_kdt45.svg.png',
       input_message_content: {
-        message_text: `🎮 *Chess Game Challenge!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black\n\nTap below to play!`,
+        message_text: `🎮 *Chess Game Challenge!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black\n⏱️ Time control: 10 min each\n\nTap below to play!`,
         parse_mode: 'Markdown'
       },
       reply_markup: {
         inline_keyboard: [[
-          { text: '♟️ Play Chess', url: getMiniAppLink(gameId) }
+          { text: '♟️ Play Chess', url: miniAppLink }
         ]]
       }
     }
@@ -233,32 +303,30 @@ bot.command('newgame', async (ctx) => {
   try {
     const gameId = createNewGame();
     const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+    const miniAppLink = getMiniAppLink(gameId);
+    const webAppUrl = getGameUrl(gameId);
+
+    const messageText = `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black\n⏱️ Time: 10 min each`;
 
     if (isGroup) {
-      await ctx.reply(
-        `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '♟️ Play Chess (Mini App)', url: getMiniAppLink(gameId) }],
-              [{ text: '🌐 Open in Browser', url: getGameUrl(gameId) }]
-            ]
-          }
+      await ctx.reply(messageText, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '♟️ Play Chess (Mini App)', url: miniAppLink }],
+            [{ text: '🌐 Open in Browser', url: webAppUrl }]
+          ]
         }
-      );
+      });
     } else {
-      await ctx.reply(
-        `🎮 *New Chess Game!*\n\nGame ID: \`${gameId}\`\n\n♔ 1st to join = White\n♚ 2nd to join = Black`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '♟️ Open Chess Board', web_app: { url: getGameUrl(gameId) } }
-            ]]
-          }
+      await ctx.reply(messageText, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '♟️ Open Chess Board', web_app: { url: webAppUrl } }
+          ]]
         }
-      );
+      });
     }
   } catch (err) {
     console.error('newgame error:', err);
@@ -276,7 +344,7 @@ bot.start(async (ctx) => {
 // ========== START ==========
 app.listen(PORT, async () => {
   console.log(`✅ Server running on port ${PORT}`);
-  await fetchBotInfo();
+  await fetchBotInfo(); // ensure username is loaded before accepting inline queries
   bot.launch()
     .then(() => console.log('✅ Bot online!'))
     .catch((err) => console.error('❌ Bot error:', err.message));
