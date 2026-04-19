@@ -4,12 +4,19 @@ const { Telegraf } = require('telegraf');
 const { Chess } = require('chess.js');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
-const mongoose = require('mongoose');
+
+// Optional Mongoose
+let mongoose = null;
+try {
+  mongoose = require('mongoose');
+} catch (e) {
+  console.warn('⚠️ Mongoose not installed. User stats will be stored in memory (not persistent).');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/chessbot';
+const MONGO_URI = process.env.MONGO_URI;
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 BASE_URL = BASE_URL.replace(/\/$/, '');
@@ -19,58 +26,84 @@ if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_U
 
 console.log(`🌐 BASE_URL: ${BASE_URL}`);
 
-// MongoDB Connection
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
-
-// User Schema
-const userSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true },
-  firstName: String,
-  lastName: String,
-  username: String,
-  photoUrl: String,
-  stats: {
-    gamesPlayed: { type: Number, default: 0 },
-    wins: { type: Number, default: 0 },
-    losses: { type: Number, default: 0 },
-    draws: { type: Number, default: 0 }
-  },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-const User = mongoose.model('User', userSchema);
-
-async function updateUserStats(userId, userInfo, result) {
-  if (!userId) return;
-  try {
-    let user = await User.findOne({ userId });
-    if (!user) {
-      user = new User({ userId, ...userInfo });
-    } else {
-      if (userInfo) {
-        user.firstName = userInfo.firstName || user.firstName;
-        user.lastName = userInfo.lastName || user.lastName;
-        user.username = userInfo.username || user.username;
-        user.photoUrl = userInfo.photoUrl || user.photoUrl;
-      }
-    }
-    user.stats.gamesPlayed += 1;
-    if (result === 'win') user.stats.wins += 1;
-    else if (result === 'loss') user.stats.losses += 1;
-    else if (result === 'draw') user.stats.draws += 1;
-    user.updatedAt = new Date();
-    await user.save();
-    console.log(`📊 Stats updated for ${userId}: ${result}`);
-  } catch (err) {
-    console.error('Error updating user stats:', err);
-  }
+if (!BOT_TOKEN) {
+  console.error('❌ BOT_TOKEN is missing in .env file');
+  process.exit(1);
 }
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+
+// ========== MONGODB (OPTIONAL) ==========
+let User = null;
+if (mongoose && MONGO_URI) {
+  mongoose.connect(MONGO_URI)
+    .then(() => console.log('✅ MongoDB connected'))
+    .catch(err => console.error('❌ MongoDB connection error:', err.message));
+
+  const userSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    firstName: String,
+    lastName: String,
+    username: String,
+    photoUrl: String,
+    stats: {
+      gamesPlayed: { type: Number, default: 0 },
+      wins: { type: Number, default: 0 },
+      losses: { type: Number, default: 0 },
+      draws: { type: Number, default: 0 }
+    },
+    updatedAt: { type: Date, default: Date.now }
+  });
+  User = mongoose.model('User', userSchema);
+} else {
+  console.log('ℹ️ MongoDB not configured – user stats will be stored in memory.');
+}
+
+const memoryStats = new Map();
+
+async function updateUserStats(userId, userInfo, result) {
+  if (!userId) return;
+  try {
+    if (User) {
+      let user = await User.findOne({ userId });
+      if (!user) {
+        user = new User({ userId, ...userInfo });
+      } else {
+        if (userInfo) {
+          user.firstName = userInfo.firstName || user.firstName;
+          user.lastName = userInfo.lastName || user.lastName;
+          user.username = userInfo.username || user.username;
+          user.photoUrl = userInfo.photoUrl || user.photoUrl;
+        }
+      }
+      user.stats.gamesPlayed += 1;
+      if (result === 'win') user.stats.wins += 1;
+      else if (result === 'loss') user.stats.losses += 1;
+      else if (result === 'draw') user.stats.draws += 1;
+      user.updatedAt = new Date();
+      await user.save();
+    } else {
+      let stats = memoryStats.get(userId);
+      if (!stats) {
+        stats = {
+          userId,
+          ...userInfo,
+          stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 }
+        };
+      }
+      stats.stats.gamesPlayed += 1;
+      if (result === 'win') stats.stats.wins += 1;
+      else if (result === 'loss') stats.stats.losses += 1;
+      else if (result === 'draw') stats.stats.draws += 1;
+      memoryStats.set(userId, stats);
+    }
+    console.log(`📊 Stats updated for ${userId}: ${result}`);
+  } catch (err) {
+    console.error('Error updating user stats:', err);
+  }
+}
 
 // ========== CHESS.JS VERSION COMPAT ==========
 function chessCompat(chess) {
@@ -130,7 +163,7 @@ const TIME_5_MIN = 5 * 60;             // 5 minutes
 // ========== GAME STORAGE ==========
 const games = new Map();
 const activeViewers = new Map();
-const chatMessages = new Map();         // gameId -> array of messages
+const chatMessages = new Map();
 
 function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
   const gameId = uuidv4().slice(0, 8);
@@ -266,11 +299,19 @@ function buildStateResponse(game, gameId) {
 
 app.get('/api/user/:userId/stats', async (req, res) => {
   try {
-    const user = await User.findOne({ userId: req.params.userId });
-    if (!user) {
-      return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+    if (User) {
+      const user = await User.findOne({ userId: req.params.userId });
+      if (!user) {
+        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+      }
+      return res.json({ stats: user.stats });
+    } else {
+      const stats = memoryStats.get(req.params.userId);
+      if (!stats) {
+        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+      }
+      return res.json({ stats: stats.stats });
     }
-    res.json({ stats: user.stats });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -498,7 +539,7 @@ app.get('/api/game/:gameId/chat', (req, res) => {
   res.json({ messages: newMessages });
 });
 
-// Cleanup every minute
+// Cleanup
 setInterval(() => {
   const now = Date.now();
   for (const [gameId, viewers] of activeViewers.entries()) {
@@ -650,9 +691,12 @@ You can also send the invitation to a group or channel. In that case, the first 
 app.listen(PORT, async () => {
   console.log(`✅ Server running on port ${PORT}`);
   await fetchBotInfo();
-  bot.launch()
-    .then(() => console.log('✅ Bot online!'))
-    .catch((err) => console.error('❌ Bot error:', err.message));
+  try {
+    await bot.launch();
+    console.log('✅ Bot online!');
+  } catch (err) {
+    console.error('❌ Bot launch error:', err.message);
+  }
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
