@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Force HTTPS for Telegram WebApp (except localhost for testing)
+// Force HTTPS for Telegram WebApp (except localhost)
 if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_URL.includes('127.0.0.1')) {
   BASE_URL = BASE_URL.replace('http://', 'https://');
 }
@@ -21,14 +21,13 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // Game storage
-const games = new Map(); // gameId -> { chess, whiteUserId, blackUserId, clients: Map, createdAt }
+const games = new Map();
 
 function getGameUrl(gameId) {
   return `${BASE_URL}/?game=${gameId}`;
 }
 
-// ========== API ROUTES ==========
-
+// ========== API ROUTES (unchanged) ==========
 app.post('/api/game/new', (req, res) => {
   const gameId = uuidv4().slice(0, 8);
   const chess = new Chess();
@@ -133,7 +132,7 @@ app.post('/api/game/:gameId/move', (req, res) => {
   }
 });
 
-// Clean up old games (1 hour)
+// Cleanup old games
 setInterval(() => {
   const now = Date.now();
   for (const [id, game] of games.entries()) {
@@ -169,13 +168,28 @@ bot.command('newgame', async (ctx) => {
 
     const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick the button below to join. First player gets White, second gets Black.`;
 
+    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+
+    let replyMarkup;
+    if (isGroup) {
+      // In groups: use regular URL button (opens in browser)
+      replyMarkup = {
+        inline_keyboard: [
+          [{ text: '♟️ Join Chess Game', url: url }]
+        ]
+      };
+    } else {
+      // In private chat: use WebApp button (opens inside Telegram)
+      replyMarkup = {
+        inline_keyboard: [
+          [{ text: '♟️ Join Chess Game', web_app: { url: url } }]
+        ]
+      };
+    }
+
     await ctx.reply(messageText, {
       parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '♟️ Join Chess Game', web_app: { url } }]
-        ]
-      }
+      reply_markup: replyMarkup
     });
   } catch (err) {
     console.error(err);
