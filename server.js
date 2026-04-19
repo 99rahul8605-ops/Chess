@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 let BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Force HTTPS for Telegram WebApp
+// Telegram Mini App ke liye HTTPS zaruri hai
 if (BASE_URL.startsWith('http://') && !BASE_URL.includes('localhost') && !BASE_URL.includes('127.0.0.1')) {
   BASE_URL = BASE_URL.replace('http://', 'https://');
 }
@@ -26,7 +26,7 @@ function getGameUrl(gameId) {
   return `${BASE_URL}/?game=${gameId}`;
 }
 
-// ========== API ROUTES ==========
+// ========== API ROUTES (Game Logic) ==========
 app.post('/api/game/new', (req, res) => {
   const gameId = uuidv4().slice(0, 8);
   const chess = new Chess();
@@ -59,77 +59,7 @@ app.post('/api/game/:gameId/join', (req, res) => {
     }
     game.clients.set(userId, assignedColor);
   }
-
-  const chess = game.chess;
-  res.json({
-    color: assignedColor,
-    fen: chess.fen(),
-    turn: chess.turn(),
-    isGameOver: chess.game_over(),
-    winner: chess.in_checkmate() ? (chess.turn() === 'w' ? 'black' : 'white') : null,
-    inCheck: chess.in_check(),
-    waitingForOpponent: !game.whiteUserId || !game.blackUserId
-  });
-});
-
-app.get('/api/game/:gameId/state', (req, res) => {
-  const { gameId } = req.params;
-  const { userId } = req.query;
-  const game = games.get(gameId);
-  if (!game) return res.status(404).json({ error: 'Game not found' });
-
-  const color = game.clients.get(userId) || null;
-  const chess = game.chess;
-  res.json({
-    color,
-    fen: chess.fen(),
-    turn: chess.turn(),
-    isGameOver: chess.game_over(),
-    winner: chess.in_checkmate() ? (chess.turn() === 'w' ? 'black' : 'white') : null,
-    inCheck: chess.in_check(),
-    isStalemate: chess.in_stalemate(),
-    isDraw: chess.in_draw(),
-    lastMove: game.lastMove || null,
-    waitingForOpponent: !game.whiteUserId || !game.blackUserId
-  });
-});
-
-app.post('/api/game/:gameId/move', (req, res) => {
-  const { gameId } = req.params;
-  const { userId, from, to, promotion = 'q' } = req.body;
-  const game = games.get(gameId);
-  if (!game) return res.status(404).json({ error: 'Game not found' });
-
-  const color = game.clients.get(userId);
-  if (color !== 'white' && color !== 'black') {
-    return res.status(403).json({ error: 'You are not a player' });
-  }
-
-  const expectedTurn = color === 'white' ? 'w' : 'b';
-  if (game.chess.turn() !== expectedTurn) {
-    return res.status(400).json({ error: 'Not your turn' });
-  }
-
-  if (!game.whiteUserId || !game.blackUserId) {
-    return res.status(400).json({ error: 'Waiting for opponent' });
-  }
-
-  try {
-    const move = game.chess.move({ from, to, promotion });
-    if (!move) return res.status(400).json({ error: 'Invalid move' });
-    game.lastMove = { from, to };
-    res.json({
-      success: true,
-      fen: game.chess.fen(),
-      turn: game.chess.turn(),
-      isGameOver: game.chess.game_over(),
-      winner: game.chess.in_checkmate() ? (game.chess.turn() === 'w' ? 'black' : 'white') : null,
-      inCheck: game.chess.in_check(),
-      move
-    });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+  res.json({ color: assignedColor, fen: game.chess.fen() });
 });
 
 // Clean up old games (1 hour)
@@ -140,30 +70,26 @@ setInterval(() => {
   }
 }, 600000);
 
-// ========== TELEGRAM BOT ==========
+// ========== TELEGRAM BOT LOGIC ==========
 const bot = new Telegraf(BOT_TOKEN);
 
 async function createGame(ctx) {
   try {
-    // Call the internal API to initialize a game
+    // API se naya game link mangwana
     const response = await fetch(`${BASE_URL}/api/game/new`, { method: 'POST' });
-    if (!response.ok) throw new Error('API server unreachable');
-    
-    const { gameId, url } = await response.json();
+    const data = await response.json();
+    const gameUrl = data.url;
 
-    const messageText = `🎮 *New Chess Game Created!*\nGame ID: \`${gameId}\`\n\nClick below to join.`;
-    
-    // Check if it is a group/supergroup
-    const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+    const messageText = `🎮 *New Chess Game Created!*\n\nNiche diye gaye button par click karke Join karein.`;
 
+    // FIXED: Group ke liye 'url' button use kiya hai, 'web_app' nahi
+    // Isse BUTTON_TYPE_INVALID error nahi aayega
     const replyMarkup = {
       inline_keyboard: [
         [
           { 
-            text: '♟️ Play Chess', 
-            // Groups get a 'url' button, Private gets a 'web_app' button
-            // This prevents the BUTTON_TYPE_INVALID error
-            ...(isGroup ? { url: url } : { web_app: { url: url } })
+            text: '♟️ Play Chess (Join)', 
+            url: gameUrl 
           }
         ]
       ]
@@ -173,32 +99,25 @@ async function createGame(ctx) {
       parse_mode: 'Markdown', 
       reply_markup: replyMarkup 
     });
+
   } catch (err) {
-    console.error('Create game error:', err);
-    // Don't let the bot crash on error
-    try {
-      await ctx.reply('⚠️ Failed to create game. Ensure the server BASE_URL is correct and reachable.');
-    } catch (e) {}
+    console.error('Error:', err);
+    ctx.reply('⚠️ Error: Server link (BASE_URL) sahi nahi hai ya server down hai.');
   }
 }
 
-bot.start((ctx) => {
-  ctx.reply('♟️ *Chess Mini App ready!* Send /newgame to start.', { parse_mode: 'Markdown' });
-});
+// Commands
+bot.command('newgame', (ctx) => createGame(ctx));
+bot.start((ctx) => ctx.reply('Chess bot ready! /newgame likhein.'));
 
-bot.command('newgame', async (ctx) => {
-  await createGame(ctx);
-});
-
-// Start Express first
+// Server aur Bot ko start karna
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  
-  // Launch Bot after server is up
+  console.log(`✅ Server is running on port ${PORT}`);
   bot.launch()
-    .then(() => console.log('Bot successfully launched!'))
-    .catch((err) => console.error('Bot launch failed:', err));
+    .then(() => console.log('✅ Bot is online!'))
+    .catch((err) => console.error('❌ Bot error:', err));
 });
 
+// Safe shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
