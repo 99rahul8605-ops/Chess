@@ -91,8 +91,14 @@
     console.warn('No Telegram user, using anonymous ID:', userId);
   }
 
+  // ✅ FIX: Read gameId from Telegram start_param (Mini App via startapp=)
+  // OR fallback to ?game= URL param (browser direct link)
+  const startParam = tg.initDataUnsafe?.start_param;
   const urlParams = new URLSearchParams(window.location.search);
-  const gameId = urlParams.get('game');
+  const gameId = startParam || urlParams.get('game');
+
+  console.log('start_param:', startParam, '| url game:', urlParams.get('game'), '| using:', gameId);
+
   if (!gameId) {
     document.getElementById('board').innerHTML = '<div class="error">No game specified. Please use the bot button.</div>';
     document.getElementById('status').textContent = 'INVALID GAME';
@@ -217,7 +223,7 @@
 
   async function fetchGameState() {
     try {
-      const res = await fetch(`/api/game/${gameId}/state?userId=${userId}`);
+      const res = await fetch(`/api/game/${gameId}/state`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       waitingForOpponent = data.waitingForOpponent;
