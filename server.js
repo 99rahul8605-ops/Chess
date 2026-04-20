@@ -184,6 +184,7 @@ function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
     whitePlayerInfo: null,
     blackPlayerInfo: null,
     statsRecorded: false,
+    drawOffer: null,          // null | 'white' | 'black'  (who offered)
   });
   activeViewers.set(gameId, new Map());
   chatMessages.set(gameId, []);
@@ -220,7 +221,8 @@ async function recordGameResult(game, explicitWinner = null) {
   let winner = explicitWinner;
   let isDraw = false;
 
-  if (!winner) {
+  if (game.isDraw) { isDraw = true; }
+  if (!winner && !isDraw) {
     const timeOutResult = checkTimeOut(game);
     if (timeOutResult) {
       winner = timeOutResult.winner;
@@ -315,6 +317,7 @@ function buildStateResponse(game, gameId) {
     whitePlayer: game.whitePlayerInfo,
     blackPlayer: game.blackPlayerInfo,
     spectatorCount,
+    drawOffer: game.drawOffer || null,
   };
 }
 
@@ -508,6 +511,68 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
     winner,
     ...buildStateResponse(game, gameId)
   });
+});
+
+
+// ========== DRAW OFFER ENDPOINTS ==========
+
+app.post('/api/game/:gameId/draw-offer', (req, res) => {
+  const { gameId } = req.params;
+  const { userId } = req.body;
+  const game = games.get(gameId);
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  const playerColor = game.assignedPlayers.get(userId);
+  if (!playerColor || playerColor === 'spectator')
+    return res.status(403).json({ error: 'Only players can offer a draw' });
+  if (!game.whiteUserId || !game.blackUserId)
+    return res.status(400).json({ error: 'Game has not started' });
+  if (game.gameOverByTime || chessCompat(game.chess).isGameOver())
+    return res.status(400).json({ error: 'Game already over' });
+  if (game.drawOffer)
+    return res.status(400).json({ error: 'Draw already offered' });
+
+  game.drawOffer = playerColor;
+  res.json({ success: true, drawOffer: playerColor, ...buildStateResponse(game, gameId) });
+});
+
+app.post('/api/game/:gameId/draw-accept', async (req, res) => {
+  const { gameId } = req.params;
+  const { userId } = req.body;
+  const game = games.get(gameId);
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  const playerColor = game.assignedPlayers.get(userId);
+  if (!playerColor || playerColor === 'spectator')
+    return res.status(403).json({ error: 'Only players can accept a draw' });
+  if (!game.drawOffer)
+    return res.status(400).json({ error: 'No draw offer pending' });
+  if (game.drawOffer === playerColor)
+    return res.status(400).json({ error: 'Cannot accept your own draw offer' });
+
+  game.drawOffer = null;
+  game.gameOverByTime = true;   // reuse flag to end the game
+  game.isDraw = true;
+
+  await recordGameResult(game);  // records as draw
+
+  res.json({ success: true, isDraw: true, winner: null, ...buildStateResponse(game, gameId) });
+});
+
+app.post('/api/game/:gameId/draw-decline', (req, res) => {
+  const { gameId } = req.params;
+  const { userId } = req.body;
+  const game = games.get(gameId);
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  const playerColor = game.assignedPlayers.get(userId);
+  if (!playerColor || playerColor === 'spectator')
+    return res.status(403).json({ error: 'Only players can decline a draw' });
+  if (!game.drawOffer)
+    return res.status(400).json({ error: 'No draw offer pending' });
+
+  game.drawOffer = null;
+  res.json({ success: true, drawOffer: null, ...buildStateResponse(game, gameId) });
 });
 
 // ========== CHAT ENDPOINTS ==========
