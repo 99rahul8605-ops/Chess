@@ -181,226 +181,13 @@
     .clock-wrap:not(.active):not(.low-time) .clock-digits { color: rgba(201,168,76,0.4); }
     .clock-wrap:not(.active):not(.low-time) .ring-progress { opacity: 0.3; }
 
-    /* ── Game Status Bar ── */
-    #game-status-bar {
-      width: 100%;
-      max-width: 576px;
-      margin-bottom: 8px;
-      border-radius: 10px;
-      overflow: hidden;
-      background: rgba(0,0,0,0.5);
-      border: 1px solid rgba(255,255,255,0.1);
-      min-height: 42px;
-      display: flex;
-      align-items: stretch;
-    }
-
-    /* Phase pill on left */
-    #status-phase {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 12px;
-      font-size: 0.6rem;
-      letter-spacing: 2.5px;
-      text-transform: uppercase;
-      font-family: Georgia, serif;
-      white-space: nowrap;
-      border-right: 1px solid rgba(255,255,255,0.08);
-      background: rgba(0,0,0,0.3);
-      min-width: 72px;
-      color: #f0d080;
-      transition: background 0.3s, color 0.3s;
-    }
-
-    /* Main message */
-    #status-main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 5px 12px;
-      gap: 2px;
-    }
-    #status-line1 {
-      font-size: 0.78rem;
-      letter-spacing: 2px;
-      font-family: Georgia, serif;
-      font-weight: bold;
-      color: #f5e070;
-      transition: color 0.3s;
-    }
-    #status-line2 {
-      font-size: 0.6rem;
-      letter-spacing: 1.5px;
-      color: rgba(240,220,120,0.6);
-      font-family: Georgia, serif;
-      min-height: 10px;
-      transition: color 0.3s;
-    }
-
-    /* Turn indicator dot on right */
-    #status-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      margin: auto 14px auto 0;
-      flex-shrink: 0;
-      background: transparent;
-      transition: background 0.3s, box-shadow 0.3s;
-    }
-
-    /* States — phase-waiting */
-    #game-status-bar.phase-waiting {
-      border-color: rgba(201,168,76,0.25);
-    }
-    #game-status-bar.phase-waiting #status-phase { color: #f0d080; }
-    #game-status-bar.phase-waiting #status-line1 { color: #f0d080; }
-    #game-status-bar.phase-waiting #status-line2 { color: rgba(240,208,128,0.55); }
-
-    /* phase-oppturn */
-    #game-status-bar.phase-oppturn {
-      border-color: rgba(255,255,255,0.12);
-    }
-    #game-status-bar.phase-oppturn #status-phase { color: #ddd; }
-    #game-status-bar.phase-oppturn #status-line1 { color: #eee; }
-    #game-status-bar.phase-oppturn #status-line2 { color: rgba(220,220,220,0.55); }
-    #game-status-bar.phase-oppturn #status-dot   { background: rgba(220,220,220,0.35); }
-
-    /* phase-myturn — bright green highlight */
-    #game-status-bar.phase-myturn {
-      border-color: rgba(100,200,80,0.45);
-      background: rgba(0,0,0,0.55);
-    }
-    #game-status-bar.phase-myturn #status-phase {
-      color: #7ee870;
-      background: rgba(100,200,80,0.12);
-    }
-    #game-status-bar.phase-myturn #status-line1 { color: #90f078; }
-    #game-status-bar.phase-myturn #status-line2 { color: rgba(140,240,120,0.65); }
-    #game-status-bar.phase-myturn #status-dot   { background: #64c850; box-shadow: 0 0 7px #4caf50; }
-
-    /* phase-check — bright red */
-    #game-status-bar.phase-check {
-      border-color: rgba(240,60,60,0.5);
-      background: rgba(60,0,0,0.5);
-    }
-    #game-status-bar.phase-check #status-phase {
-      color: #ff7070;
-      background: rgba(220,40,40,0.15);
-    }
-    #game-status-bar.phase-check #status-line1 {
-      color: #ff8080;
-      animation: status-pulse 0.5s infinite alternate;
-    }
-    #game-status-bar.phase-check #status-line2 { color: rgba(255,140,140,0.7); }
-    #game-status-bar.phase-check #status-dot   {
-      background: #f04040;
-      box-shadow: 0 0 7px #e84040;
-      animation: status-pulse 0.5s infinite alternate;
-    }
-
-    /* phase-over */
-    #game-status-bar.phase-over {
-      border-color: rgba(201,168,76,0.35);
-      background: rgba(0,0,0,0.55);
-    }
-    #game-status-bar.phase-over #status-phase { color: #f0d080; }
-    #game-status-bar.phase-over #status-line1 { color: #ffffff; font-size: 0.82rem; }
-    #game-status-bar.phase-over #status-line2 { color: rgba(240,208,128,0.65); }
-
-    @keyframes status-pulse { from{opacity:1} to{opacity:0.25} }
-
-    /* keep old #status hidden but present so JS refs don't break */
-    #status { display: none; }
-
-    /* ── Confirm Dialog ── */
-    #confirm-modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.65);
-      backdrop-filter: blur(3px);
-      z-index: 300;
-      align-items: center;
-      justify-content: center;
-    }
-    #confirm-modal.show { display: flex; }
-    .confirm-box {
-      background: #1e130a;
-      border: 1.5px solid rgba(201,168,76,0.4);
-      border-radius: 14px;
-      padding: 24px 22px 18px;
-      width: min(290px, 88vw);
+    #status {
+      font-size: 0.72rem; letter-spacing: 3px; min-height: 22px; margin-bottom: 8px;
       text-align: center;
-      animation: confirm-pop 0.22s cubic-bezier(0.34,1.56,0.64,1);
     }
-    @keyframes confirm-pop {
-      from { transform: scale(0.85); opacity: 0; }
-      to   { transform: scale(1);    opacity: 1; }
-    }
-    .confirm-icon {
-      font-size: 2rem;
-      margin-bottom: 8px;
-      display: block;
-    }
-    .confirm-title {
-      font-family: Georgia, serif;
-      font-size: 0.9rem;
-      letter-spacing: 3px;
-      color: #fff;
-      margin-bottom: 6px;
-    }
-    .confirm-sub {
-      font-family: Georgia, serif;
-      font-size: 0.65rem;
-      letter-spacing: 1.5px;
-      color: rgba(201,168,76,0.55);
-      margin-bottom: 20px;
-      line-height: 1.5;
-    }
-    .confirm-btns {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-    }
-    .confirm-yes {
-      flex: 1;
-      font-family: Georgia, serif;
-      font-size: 0.68rem;
-      letter-spacing: 2px;
-      padding: 9px 0;
-      border-radius: 6px;
-      border: 1.5px solid;
-      cursor: pointer;
-      transition: background 0.18s;
-    }
-    .confirm-yes.danger {
-      background: rgba(200,40,40,0.12);
-      border-color: #a04040;
-      color: #f0a0a0;
-    }
-    .confirm-yes.danger:hover { background: rgba(200,40,40,0.28); }
-    .confirm-yes.peace {
-      background: rgba(100,176,80,0.1);
-      border-color: #4a7040;
-      color: #a5d6a5;
-    }
-    .confirm-yes.peace:hover { background: rgba(100,176,80,0.25); }
-    .confirm-no {
-      flex: 1;
-      font-family: Georgia, serif;
-      font-size: 0.68rem;
-      letter-spacing: 2px;
-      padding: 9px 0;
-      border-radius: 6px;
-      border: 1px solid rgba(201,168,76,0.2);
-      background: transparent;
-      color: rgba(201,168,76,0.55);
-      cursor: pointer;
-      transition: color 0.18s, border-color 0.18s;
-    }
-    .confirm-no:hover { color: #c9a84c; border-color: rgba(201,168,76,0.5); }
+    #status.check { color: #e84040; animation: pulse 0.5s infinite alternate; }
+    #status.checkmate { color: #e82020; font-weight: bold; }
+    @keyframes pulse { from{opacity:1} to{opacity:0.2} }
 
     #board-wrap {
       border: 3px solid var(--tg-theme-button-color, #5a3c10);
@@ -414,11 +201,6 @@
       grid-template-columns: repeat(8, 12.5%);
       width: 100%;
       aspect-ratio: 1;
-      background: #2a1e0f;
-      color: rgba(201,168,76,0.5);
-      font-family: Georgia, serif;
-      font-size: 0.8rem;
-      letter-spacing: 3px;
     }
     .cell {
       aspect-ratio: 1;
@@ -466,105 +248,6 @@
       letter-spacing: 3px;
       color: #c9a84c;
     }
-
-    /* ── Game Over Overlay ── */
-    #gameover-overlay {
-      display: none;
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(10, 6, 2, 0.88);
-      backdrop-filter: blur(6px);
-      z-index: 20;
-      border-radius: inherit;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-      animation: go-fade-in 0.45s ease-out;
-    }
-    #gameover-overlay.show { display: flex; }
-
-    @keyframes go-fade-in {
-      from { opacity: 0; transform: scale(0.94); }
-      to   { opacity: 1; transform: scale(1); }
-    }
-
-    #go-emoji {
-      font-size: 3.2rem;
-      line-height: 1;
-      margin-bottom: 10px;
-      animation: go-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) 0.15s both;
-    }
-    @keyframes go-pop {
-      from { transform: scale(0); opacity: 0; }
-      to   { transform: scale(1); opacity: 1; }
-    }
-
-    #go-headline {
-      font-family: Georgia, serif;
-      font-size: clamp(1.25rem, 5vw, 1.85rem);
-      font-weight: bold;
-      letter-spacing: 4px;
-      color: #fff;
-      text-align: center;
-      padding: 0 16px;
-      text-shadow: 0 0 24px rgba(201,168,76,0.6);
-      animation: go-slide-up 0.4s ease-out 0.25s both;
-      line-height: 1.2;
-    }
-    #go-sub {
-      font-family: Georgia, serif;
-      font-size: 0.72rem;
-      letter-spacing: 2.5px;
-      color: rgba(201,168,76,0.7);
-      text-align: center;
-      margin-top: 8px;
-      padding: 0 20px;
-      animation: go-slide-up 0.4s ease-out 0.35s both;
-    }
-    @keyframes go-slide-up {
-      from { transform: translateY(16px); opacity: 0; }
-      to   { transform: translateY(0);    opacity: 1; }
-    }
-
-    .go-divider {
-      width: 48px;
-      height: 1px;
-      background: rgba(201,168,76,0.35);
-      margin: 16px auto;
-      animation: go-slide-up 0.4s ease-out 0.4s both;
-    }
-
-    #go-exit-btn {
-      font-family: Georgia, serif;
-      font-size: 0.72rem;
-      letter-spacing: 3px;
-      padding: 10px 32px;
-      background: rgba(201,168,76,0.1);
-      color: #c9a84c;
-      border: 1.5px solid rgba(201,168,76,0.5);
-      border-radius: 4px;
-      cursor: pointer;
-      animation: go-slide-up 0.4s ease-out 0.5s both;
-      transition: background 0.2s, border-color 0.2s;
-    }
-    #go-exit-btn:hover { background: rgba(201,168,76,0.22); border-color: #c9a84c; }
-
-    #go-new-btn {
-      font-family: Georgia, serif;
-      font-size: 0.68rem;
-      letter-spacing: 2px;
-      padding: 8px 24px;
-      background: transparent;
-      color: rgba(201,168,76,0.5);
-      border: 1px solid rgba(201,168,76,0.2);
-      border-radius: 4px;
-      cursor: pointer;
-      margin-top: 8px;
-      animation: go-slide-up 0.4s ease-out 0.58s both;
-      transition: color 0.2s, border-color 0.2s;
-    }
-    #go-new-btn:hover { color: #c9a84c; border-color: rgba(201,168,76,0.5); }
 
     #controls {
       margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
@@ -864,28 +547,12 @@
   </div>
 </div>
 
-<div id="game-status-bar" class="phase-waiting">
-  <div id="status-phase">WAIT</div>
-  <div id="status-main">
-    <div id="status-line1">CONNECTING...</div>
-    <div id="status-line2"></div>
-  </div>
-  <div id="status-dot"></div>
-</div>
-<div id="status" style="display:none"></div>
+<div id="status">Connecting...</div>
 
 <div id="board-wrap">
-  <div id="board">Loading game...</div>
+  <div id="board" class="loading">Loading game...</div>
   <div id="waiting-overlay" style="display: none;">
     <div class="waiting-message">⏳ WAITING FOR OPPONENT...</div>
-  </div>
-  <div id="gameover-overlay">
-    <div id="go-emoji">♟️</div>
-    <div id="go-headline">GAME OVER</div>
-    <div id="go-sub"></div>
-    <div class="go-divider"></div>
-    <button id="go-exit-btn" onclick="closeGameOverOverlay()">✕ CLOSE</button>
-    <button id="go-new-btn" onclick="newGame()">⟳ NEW GAME</button>
   </div>
 </div>
 
@@ -933,19 +600,6 @@
       <div class="promo-piece" data-piece="n">♘</div>
     </div>
     <button class="close-btn" onclick="cancelPromotion()">Cancel</button>
-  </div>
-</div>
-
-<!-- Confirm Dialog -->
-<div id="confirm-modal">
-  <div class="confirm-box">
-    <span class="confirm-icon" id="confirm-icon">⚠️</span>
-    <div class="confirm-title" id="confirm-title">ARE YOU SURE?</div>
-    <div class="confirm-sub" id="confirm-sub"></div>
-    <div class="confirm-btns">
-      <button class="confirm-yes danger" id="confirm-yes-btn" onclick="confirmYes()">CONFIRM</button>
-      <button class="confirm-no" onclick="confirmNo()">CANCEL</button>
-    </div>
   </div>
 </div>
 
@@ -1517,9 +1171,6 @@
 
   // --- API & Game Flow ---
   async function joinGame() {
-    // Clear any stale "Loading game..." text and classes immediately
-    boardEl.innerHTML = '';
-    boardEl.className = '';
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
         method: 'POST',
@@ -1540,8 +1191,8 @@
       updateStatus(data);
       startPolling();
     } catch (err) {
-      console.error('joinGame error:', err);
-      boardEl.innerHTML = '<div style="color:#e84040;text-align:center;padding:20px;font-family:Georgia,serif;font-size:0.8rem;letter-spacing:2px">CONNECTION ERROR<br><br><small>Check your internet and reload</small></div>';
+      document.getElementById('status').textContent = 'Failed to join.';
+      boardEl.innerHTML = `<div class="error">${err.message}</div>`;
     }
   }
 
@@ -1564,7 +1215,7 @@
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
       const newBoard = fenToBoard(data.fen);
-      if (!boardState || JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
+      if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
         lastMove = data.lastMove;
         selectedSquare = null; possibleMoves = [];
@@ -1619,31 +1270,22 @@
 
   async function resignGame() {
     if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
-    showConfirm({
-      icon: '🏳️',
-      title: 'RESIGN GAME?',
-      sub: 'You will lose the match.
-This cannot be undone.',
-      yesLabel: 'RESIGN',
-      yesClass: 'danger',
-      onYes: async () => {
-        try {
-          const res = await fetch(`/api/game/${gameId}/resign`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId })
-          });
-          const data = await res.json();
-          if (res.ok) {
-            gameOver = true;
-            updateStatus(data);
-            updatePlayerDisplays(data);
-            renderBoard();
-            stopLocalTimer();
-          }
-        } catch (err) { console.error(err); }
+    if (!confirm('Are you sure you want to resign?')) return;
+    try {
+      const res = await fetch(`/api/game/${gameId}/resign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        gameOver = true;
+        updateStatus(data);
+        updatePlayerDisplays(data);
+        renderBoard();
+        stopLocalTimer();
       }
-    });
+    } catch (err) { console.error(err); }
   }
 
   async function newGame() {
@@ -1657,110 +1299,35 @@ This cannot be undone.',
   }
 
   function updateStatus(data) {
-    // Legacy hidden element (some code paths still reference it)
-    const s = document.getElementById('status');
-    const bar = document.getElementById('game-status-bar');
-    const phase = document.getElementById('status-phase');
-    const line1 = document.getElementById('status-line1');
-    const line2 = document.getElementById('status-line2');
-    const dot   = document.getElementById('status-dot');
-    const info  = document.getElementById('info');
-    if (!bar) return;
-
-    // Helper to set the bar state
-    function setBar(phaseClass, phaseLabel, mainText, subText) {
-      bar.className = '';
-      bar.classList.add('phase-' + phaseClass);
-      phase.textContent = phaseLabel;
-      line1.textContent = mainText;
-      line2.textContent = subText || '';
-    }
-
-    // ── Game over ──────────────────────────────────────────────────
+    const s = document.getElementById('status'), info = document.getElementById('info');
     if (data.isGameOver) {
-      let headline, sub;
-      if (data.winner) {
-        const winName = data.winner === 'white'
-          ? (data.whitePlayer?.firstName || 'White')
-          : (data.blackPlayer?.firstName || 'Black');
-        const winIcon = data.winner === 'white' ? '⚪' : '⚫';
-        headline = `${winIcon} ${winName.toUpperCase()} WINS!`;
-        if (data.winner === myColor) sub = '🏆 You won!';
-        else if (myColor && myColor !== 'spectator') sub = 'Better luck next time';
-        else sub = `${data.winner.charAt(0).toUpperCase() + data.winner.slice(1)} wins the match`;
-      } else if (data.isDraw) {
-        headline = '🤝 DRAW BY AGREEMENT';
-        sub = 'Honours even — well played!';
-      } else {
-        headline = 'GAME OVER';
-        sub = '';
-      }
-      setBar('over', 'END', headline, sub);
-      if (info) { info.textContent = 'Game finished'; info.style.color = '#c9a84c'; }
-      if (s) s.textContent = headline;
-      // Show the big board overlay
-      showGameOverOverlay(data);
+      if (data.winner) s.textContent = `${data.winner.toUpperCase()} WINS!`;
+      else if (data.isDraw) s.textContent = '🤝 DRAW BY AGREEMENT';
+      else s.textContent = 'GAME OVER';
+      s.className = 'checkmate';
+      info.textContent = 'Game finished';
       return;
     }
-
-    // ── Waiting for players ────────────────────────────────────────
-    const hasWhite = !!(data.whiteUserId);
-    const hasBlack = !!(data.blackUserId);
-
-    if (!hasWhite && !hasBlack) {
-      setBar('waiting', 'WAIT', 'WAITING FOR PLAYERS...', 'Share the link to invite someone');
-      if (info) { info.textContent = 'Share the game!'; info.style.color = '#c9a84c'; }
-      if (s) s.textContent = '⏳ WAITING FOR PLAYERS...';
+    if (data.waitingForAssignment || waitingForOpponent) {
+      s.textContent = '⏳ WAITING FOR OPPONENT...';
+      s.className = '';
+      info.textContent = 'Share the game with a friend!';
       return;
     }
-
-    if (data.waitingForAssignment || waitingForOpponent || (!hasWhite || !hasBlack)) {
-      // One player is in
-      const joinedName = hasWhite
-        ? (data.whitePlayer?.firstName || 'White')
-        : (data.blackPlayer?.firstName || 'Black');
-      const joinedIcon = hasWhite ? '⚪' : '⚫';
-      setBar('waiting', 'WAIT',
-        `${joinedIcon} ${joinedName.toUpperCase()} JOINED`,
-        'Waiting for opponent to join...');
-      if (info) { info.textContent = 'Share the game!'; info.style.color = '#c9a84c'; }
-      if (s) s.textContent = '⏳ WAITING FOR OPPONENT...';
-      return;
-    }
-
-    // ── Both joined — show VS header once ─────────────────────────
-    const whiteName = data.whitePlayer?.firstName || 'White';
-    const blackName = data.blackPlayer?.firstName || 'Black';
-
-    // ── Active game ────────────────────────────────────────────────
-    const myTurn = (myColor==='white' && data.turn==='w') || (myColor==='black' && data.turn==='b');
-    const activeName = data.turn === 'w' ? whiteName : blackName;
-    const activeIcon = data.turn === 'w' ? '⚪' : '⚫';
-
     if (data.inCheck) {
-      setBar('check', 'CHECK',
-        `${activeIcon} ${activeName.toUpperCase()} IN CHECK!`,
-        myTurn ? '⚠️ Your king is in check — move it!' : `${activeName} must escape check`);
-      if (info) { info.textContent = myTurn ? 'YOUR TURN' : "OPPONENT'S TURN"; info.style.color = '#e84040'; }
-      if (s) { s.textContent = `${data.turn==='w'?'WHITE':'BLACK'} IN CHECK!`; s.className = 'check'; }
-    } else if (myTurn) {
-      setBar('myturn', 'YOUR TURN',
-        `${activeIcon} YOUR MOVE`,
-        `${whiteName} ⚔ ${blackName}`);
-      if (info) { info.textContent = 'YOUR TURN'; info.style.color = '#64b050'; }
-      if (s) { s.textContent = "YOUR TURN"; s.className = ''; }
+      s.textContent = `${data.turn==='w'?'WHITE':'BLACK'} IN CHECK!`;
+      s.className = 'check';
     } else {
-      setBar('oppturn', 'PLAYING',
-        `${activeIcon} ${activeName.toUpperCase()}'S TURN`,
-        `${whiteName} ⚔ ${blackName}`);
-      if (info) { info.textContent = "OPPONENT'S TURN"; info.style.color = '#c9a84c'; }
-      if (s) { s.textContent = `${data.turn==='w'?'WHITE':'BLACK'}'S TURN`; s.className = ''; }
+      s.textContent = `${data.turn==='w'?'WHITE':'BLACK'}'S TURN`;
+      s.className = '';
     }
+    const myTurn = (myColor==='white' && data.turn==='w') || (myColor==='black' && data.turn==='b');
+    info.textContent = myTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
+    info.style.color = myTurn ? '#64b050' : '#c9a84c';
   }
 
   function renderBoard() {
     boardEl.innerHTML = '';
-    boardEl.className = ''; // clear any stale classes like "loading"
     if (!boardState) return;
     for (let dr=0; dr<8; dr++) for (let dc=0; dc<8; dc++) {
       const int = displayToInternal(dr, dc);
@@ -1985,28 +1552,18 @@ This cannot be undone.',
 
   async function offerDraw() {
     if (!myColor || myColor === 'spectator' || gameOver || waitingForOpponent || drawOfferPending) return;
-    showConfirm({
-      icon: '🤝',
-      title: 'OFFER A DRAW?',
-      sub: 'Your opponent can accept
-or decline the offer.',
-      yesLabel: 'OFFER DRAW',
-      yesClass: 'peace',
-      onYes: async () => {
-        try {
-          const res = await fetch(`/api/game/${gameId}/draw-offer`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId })
-          });
-          const data = await res.json();
-          if (res.ok) {
-            handleDrawOfferState(data.drawOffer);
-            tg.HapticFeedback?.impactOccurred('medium');
-          }
-        } catch (err) { console.error(err); }
+    try {
+      const res = await fetch(`/api/game/${gameId}/draw-offer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        handleDrawOfferState(data.drawOffer);
+        tg.HapticFeedback?.impactOccurred('medium');
       }
-    });
+    } catch (err) { console.error(err); }
   }
 
   async function acceptDraw() {
@@ -2046,90 +1603,7 @@ or decline the offer.',
   window.offerDraw   = offerDraw;
   window.acceptDraw  = acceptDraw;
   window.declineDraw = declineDraw;
-
-  // ── Confirm Dialog ───────────────────────────────────────────────
-  let _confirmCallback = null;
-
-  function showConfirm({ icon, title, sub, yesLabel, yesClass, onYes }) {
-    document.getElementById('confirm-icon').textContent   = icon  || '⚠️';
-    document.getElementById('confirm-title').textContent  = title || 'ARE YOU SURE?';
-    document.getElementById('confirm-sub').textContent    = sub   || '';
-    const yesBtn = document.getElementById('confirm-yes-btn');
-    yesBtn.textContent = yesLabel || 'CONFIRM';
-    yesBtn.className   = 'confirm-yes ' + (yesClass || 'danger');
-    _confirmCallback   = onYes || null;
-    document.getElementById('confirm-modal').classList.add('show');
-    tg.HapticFeedback?.impactOccurred('medium');
-  }
-
-  function confirmYes() {
-    document.getElementById('confirm-modal').classList.remove('show');
-    if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
-  }
-
-  function confirmNo() {
-    document.getElementById('confirm-modal').classList.remove('show');
-    _confirmCallback = null;
-    tg.HapticFeedback?.impactOccurred('light');
-  }
-
-  window.showConfirm = showConfirm;
-  window.confirmYes  = confirmYes;
-  window.confirmNo   = confirmNo;
-  // ── End Confirm Dialog ───────────────────────────────────────────
   // ── End Draw Offer Logic ──────────────────────────────────────────
-
-  // ── Game Over Overlay ──────────────────────────────────────────
-  function showGameOverOverlay(data) {
-    const overlay  = document.getElementById('gameover-overlay');
-    const emoji    = document.getElementById('go-emoji');
-    const headline = document.getElementById('go-headline');
-    const sub      = document.getElementById('go-sub');
-    if (!overlay) return;
-
-    const whiteName = data.whitePlayer?.firstName || 'White';
-    const blackName = data.blackPlayer?.firstName || 'Black';
-
-    if (data.isDraw || (!data.winner && data.isGameOver)) {
-      emoji.textContent    = '🤝';
-      headline.textContent = 'DRAW';
-      sub.textContent      = 'Honours even — well played!';
-    } else if (data.winner) {
-      const winName  = data.winner === 'white' ? whiteName : blackName;
-      const lostName = data.winner === 'white' ? blackName : whiteName;
-      const iWon     = myColor === data.winner;
-
-      if (iWon) {
-        emoji.textContent    = '🏆';
-        headline.textContent = 'YOU WIN!';
-        sub.textContent      = `${winName} defeats ${lostName}`;
-      } else if (myColor && myColor !== 'spectator') {
-        emoji.textContent    = '💀';
-        headline.textContent = 'YOU LOSE';
-        sub.textContent      = `${winName} defeats ${lostName}`;
-      } else {
-        // Spectator
-        emoji.textContent    = '🏆';
-        headline.textContent = `${winName.toUpperCase()} WINS!`;
-        sub.textContent      = `${winName} defeats ${lostName}`;
-      }
-    } else {
-      emoji.textContent    = '🏁';
-      headline.textContent = 'GAME OVER';
-      sub.textContent      = '';
-    }
-
-    overlay.classList.add('show');
-    tg.HapticFeedback?.notificationOccurred(data.winner === myColor ? 'success' : 'error');
-  }
-
-  function closeGameOverOverlay() {
-    const overlay = document.getElementById('gameover-overlay');
-    if (overlay) overlay.classList.remove('show');
-  }
-
-  window.closeGameOverOverlay = closeGameOverOverlay;
-  // ── End Game Over Overlay ────────────────────────────────────────
 
   window.resignGame = resignGame;
   window.newGame = newGame;
