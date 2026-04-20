@@ -837,13 +837,23 @@
 
   function startLocalTimer() {
     if (localTimerInterval) clearInterval(localTimerInterval);
+    // Don't start ticking if game hasn't begun or is already over
+    if (waitingForOpponent || gameOver) {
+      updateClockDisplay();
+      return;
+    }
     localTimerInterval = setInterval(() => {
-      if (gameOver || waitingForOpponent) return;
+      if (gameOver || waitingForOpponent) {
+        clearInterval(localTimerInterval);
+        localTimerInterval = null;
+        return;
+      }
       if (currentTurn === 'w') {
         whiteTime = Math.max(0, whiteTime - 0.1);
         if (whiteTime <= 0) {
           gameOver = true;
           clearInterval(localTimerInterval);
+          localTimerInterval = null;
           document.getElementById('status').textContent = 'BLACK WINS ON TIME!';
           document.getElementById('status').className = 'checkmate';
         }
@@ -852,6 +862,7 @@
         if (blackTime <= 0) {
           gameOver = true;
           clearInterval(localTimerInterval);
+          localTimerInterval = null;
           document.getElementById('status').textContent = 'WHITE WINS ON TIME!';
           document.getElementById('status').className = 'checkmate';
         }
@@ -863,7 +874,8 @@
   function syncTimeFromServer(data) {
     if (data.whiteTime !== undefined) whiteTime = data.whiteTime;
     if (data.blackTime !== undefined) blackTime = data.blackTime;
-    updateClockDisplay();
+    // Restart local timer so it always ticks the correct side after a server sync
+    startLocalTimer();
   }
 
   // --- Promotion handling ---
@@ -915,7 +927,7 @@
       toggleWaitingOverlay(waitingForOpponent);
       renderBoard();
       updateStatus(data);
-      startLocalTimer();
+      // startLocalTimer is called inside syncTimeFromServer
       startPolling();
     } catch (err) {
       document.getElementById('status').textContent = 'Failed to join.';
@@ -955,6 +967,7 @@
       }
       if (gameOver) {
         clearInterval(localTimerInterval);
+        localTimerInterval = null;
         clearInterval(updateInterval);
       }
     } catch (err) {}
@@ -982,7 +995,7 @@
         renderBoard();
         updateStatus(data);
         tg.HapticFeedback.impactOccurred('light');
-        if (gameOver) clearInterval(localTimerInterval);
+        if (gameOver) { clearInterval(localTimerInterval); localTimerInterval = null; }
       } else {
         document.getElementById('status').textContent = `Invalid: ${data.error||'move'}`;
         setTimeout(fetchGameState, 1000);
@@ -1009,6 +1022,7 @@
         updatePlayerDisplays(data);
         renderBoard();
         clearInterval(localTimerInterval);
+        localTimerInterval = null;
       }
     } catch (err) { console.error(err); }
   }
