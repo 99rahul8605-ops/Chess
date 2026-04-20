@@ -790,10 +790,10 @@
           else if (getPieceColor(t)!==pieceColor) pseudo.push({ toRow: nr, toCol: nc, isCapture: true });
         }
       }
-      // Castling (only if king hasn't moved, rook present, squares empty and not attacked)
+      // Castling
       const backRank = pieceColor === 'white' ? 7 : 0;
       if (row === backRank && col === 4) {
-        // Kingside castling (O-O)
+        // Kingside
         if (!isSquareAttacked(pieceColor==='white'?'black':'white', row, col) &&
             !isSquareAttacked(pieceColor==='white'?'black':'white', row, 5) &&
             !isSquareAttacked(pieceColor==='white'?'black':'white', row, 6) &&
@@ -802,7 +802,7 @@
             getPieceColor(boardState[row][7]) === pieceColor) {
           pseudo.push({ toRow: row, toCol: 6, isCapture: false, isCastling: true });
         }
-        // Queenside castling (O-O-O)
+        // Queenside
         if (!isSquareAttacked(pieceColor==='white'?'black':'white', row, col) &&
             !isSquareAttacked(pieceColor==='white'?'black':'white', row, 3) &&
             !isSquareAttacked(pieceColor==='white'?'black':'white', row, 2) &&
@@ -814,31 +814,52 @@
       }
     }
 
-    // Filter illegal moves (king safety)
     return pseudo.filter(m => isMoveLegal(row, col, m.toRow, m.toCol, pieceColor));
   }
 
   // --- Clock display ---
-  function formatTime(s) { if (s<0) s=0; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}:${sec<10?'0':''}${sec}`; }
+  function formatTime(s) { 
+    if (s < 0) s = 0;
+    const mins = Math.floor(s / 60);
+    const secs = Math.floor(s % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+
   function updateClockDisplay() {
     document.getElementById('white-clock').textContent = formatTime(whiteTime);
     document.getElementById('black-clock').textContent = formatTime(blackTime);
     const wc = document.getElementById('white-clock'), bc = document.getElementById('black-clock');
-    wc.classList.toggle('active', currentTurn==='w' && !gameOver && !waitingForOpponent);
-    bc.classList.toggle('active', currentTurn==='b' && !gameOver && !waitingForOpponent);
-    wc.classList.toggle('low-time', whiteTime<30);
-    bc.classList.toggle('low-time', blackTime<30);
+    wc.classList.toggle('active', currentTurn === 'w' && !gameOver && !waitingForOpponent);
+    bc.classList.toggle('active', currentTurn === 'b' && !gameOver && !waitingForOpponent);
+    wc.classList.toggle('low-time', whiteTime < 30);
+    bc.classList.toggle('low-time', blackTime < 30);
   }
+
   function startLocalTimer() {
     if (localTimerInterval) clearInterval(localTimerInterval);
     localTimerInterval = setInterval(() => {
       if (gameOver || waitingForOpponent) return;
-      if (currentTurn === 'w') { whiteTime = Math.max(0, whiteTime - 0.1); if (whiteTime<=0) { gameOver=true; clearInterval(localTimerInterval); } }
-      else if (currentTurn === 'b') { blackTime = Math.max(0, blackTime - 0.1); if (blackTime<=0) { gameOver=true; clearInterval(localTimerInterval); } }
+      if (currentTurn === 'w') {
+        whiteTime = Math.max(0, whiteTime - 0.1);
+        if (whiteTime <= 0) {
+          gameOver = true;
+          clearInterval(localTimerInterval);
+          document.getElementById('status').textContent = 'BLACK WINS ON TIME!';
+          document.getElementById('status').className = 'checkmate';
+        }
+      } else if (currentTurn === 'b') {
+        blackTime = Math.max(0, blackTime - 0.1);
+        if (blackTime <= 0) {
+          gameOver = true;
+          clearInterval(localTimerInterval);
+          document.getElementById('status').textContent = 'WHITE WINS ON TIME!';
+          document.getElementById('status').className = 'checkmate';
+        }
+      }
       updateClockDisplay();
-      if (gameOver) document.getElementById('status').textContent = `${currentTurn==='w'?'BLACK':'WHITE'} WINS ON TIME!`;
     }, 100);
   }
+
   function syncTimeFromServer(data) {
     if (data.whiteTime !== undefined) whiteTime = data.whiteTime;
     if (data.blackTime !== undefined) blackTime = data.blackTime;
@@ -857,13 +878,12 @@
   window.cancelPromotion = function() {
     document.getElementById('promotion-modal').style.display = 'none';
     if (promotionResolve) {
-      promotionResolve('q'); // default queen
+      promotionResolve('q');
       promotionResolve = null;
     }
     pendingPromotion = null;
   };
 
-  // Promotion piece selection
   document.querySelectorAll('.promo-piece').forEach(el => {
     el.addEventListener('click', () => {
       const piece = el.dataset.piece;
@@ -933,7 +953,10 @@
         toggleWaitingOverlay(waitingForOpponent);
         if (!waitingForOpponent) renderBoard();
       }
-      if (gameOver) { clearInterval(localTimerInterval); clearInterval(updateInterval); }
+      if (gameOver) {
+        clearInterval(localTimerInterval);
+        clearInterval(updateInterval);
+      }
     } catch (err) {}
   }
 
@@ -1015,8 +1038,13 @@
       info.textContent = 'Share the game with a friend!';
       return;
     }
-    if (data.inCheck) { s.textContent = `${data.turn==='w'?'WHITE':'BLACK'} IN CHECK!`; s.className = 'check'; }
-    else { s.textContent = `${data.turn==='w'?'WHITE':'BLACK'}'S TURN`; s.className = ''; }
+    if (data.inCheck) {
+      s.textContent = `${data.turn==='w'?'WHITE':'BLACK'} IN CHECK!`;
+      s.className = 'check';
+    } else {
+      s.textContent = `${data.turn==='w'?'WHITE':'BLACK'}'S TURN`;
+      s.className = '';
+    }
     const myTurn = (myColor==='white' && data.turn==='w') || (myColor==='black' && data.turn==='b');
     info.textContent = myTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
     info.style.color = myTurn ? '#64b050' : '#c9a84c';
@@ -1051,7 +1079,11 @@
   async function onCellClick(row, col) {
     if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
     const myTurn = (myColor==='white' && currentTurn==='w') || (myColor==='black' && currentTurn==='b');
-    if (!myTurn) { tg.HapticFeedback.notificationOccurred('warning'); document.getElementById('status').textContent = "Not your turn"; return; }
+    if (!myTurn) {
+      tg.HapticFeedback.notificationOccurred('warning');
+      document.getElementById('status').textContent = "Not your turn";
+      return;
+    }
     const piece = boardState[row][col];
     if (selectedSquare) {
       const move = possibleMoves.find(m => m.toRow===row && m.toCol===col);
@@ -1068,10 +1100,26 @@
       } else {
         selectedSquare = null; possibleMoves = [];
         renderBoard();
-        if (piece) { const c=getPieceColor(piece); if((myColor==='white'&&c==='white')||(myColor==='black'&&c==='black')) { selectedSquare={row,col}; possibleMoves=getMovesFromSquare(row,col); renderBoard(); tg.HapticFeedback.selectionChanged(); } }
+        if (piece) {
+          const c = getPieceColor(piece);
+          if ((myColor==='white'&&c==='white')||(myColor==='black'&&c==='black')) {
+            selectedSquare = {row, col};
+            possibleMoves = getMovesFromSquare(row, col);
+            renderBoard();
+            tg.HapticFeedback.selectionChanged();
+          }
+        }
       }
     } else {
-      if (piece) { const c=getPieceColor(piece); if((myColor==='white'&&c==='white')||(myColor==='black'&&c==='black')) { selectedSquare={row,col}; possibleMoves=getMovesFromSquare(row,col); renderBoard(); tg.HapticFeedback.selectionChanged(); } }
+      if (piece) {
+        const c = getPieceColor(piece);
+        if ((myColor==='white'&&c==='white')||(myColor==='black'&&c==='black')) {
+          selectedSquare = {row, col};
+          possibleMoves = getMovesFromSquare(row, col);
+          renderBoard();
+          tg.HapticFeedback.selectionChanged();
+        }
+      }
     }
   }
 
