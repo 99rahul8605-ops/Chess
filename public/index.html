@@ -267,6 +267,69 @@
       border-color: #a04040;
       color: #e0a0a0;
     }
+    #draw-btn {
+      background: rgba(100,176,80,0.08);
+      border-color: #4a7040;
+      color: #a5d6a5;
+    }
+    #draw-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    /* Draw offer incoming banner */
+    #draw-offer-banner {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1005;
+      border: 1.5px solid #c9a84c;
+      border-radius: 12px;
+      padding: 12px 18px;
+      text-align: center;
+      z-index: 200;
+      min-width: 260px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.8);
+      animation: banner-pop 0.2s ease-out;
+    }
+    #draw-offer-banner.show { display: block; }
+    @keyframes banner-pop {
+      from { opacity: 0; transform: translateX(-50%) scale(0.92); }
+      to   { opacity: 1; transform: translateX(-50%) scale(1); }
+    }
+    #draw-offer-banner p {
+      font-size: 0.78rem;
+      letter-spacing: 2px;
+      color: #c9a84c;
+      margin-bottom: 10px;
+    }
+    .draw-banner-btns { display: flex; gap: 10px; justify-content: center; }
+    .draw-accept-btn {
+      background: rgba(100,176,80,0.15);
+      border: 1.5px solid #64b050;
+      color: #a5d6a5;
+      font-family: Georgia, serif;
+      font-size: 0.68rem;
+      letter-spacing: 2px;
+      padding: 6px 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .draw-accept-btn:hover { background: rgba(100,176,80,0.3); }
+    .draw-decline-btn {
+      background: rgba(200,40,40,0.1);
+      border: 1.5px solid #a04040;
+      color: #e0a0a0;
+      font-family: Georgia, serif;
+      font-size: 0.68rem;
+      letter-spacing: 2px;
+      padding: 6px 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .draw-decline-btn:hover { background: rgba(200,40,40,0.25); }
 
     /* Stats Modal */
     .modal {
@@ -495,6 +558,7 @@
 
 <div id="controls">
   <div id="info"></div>
+  <button id="draw-btn" onclick="offerDraw()">🤝 DRAW</button>
   <button id="resign-btn" onclick="resignGame()">🏳️ RESIGN</button>
   <button onclick="newGame()">⟳ NEW GAME</button>
 </div>
@@ -536,6 +600,15 @@
       <div class="promo-piece" data-piece="n">♘</div>
     </div>
     <button class="close-btn" onclick="cancelPromotion()">Cancel</button>
+  </div>
+</div>
+
+<!-- Draw Offer Banner -->
+<div id="draw-offer-banner">
+  <p>🤝 OPPONENT OFFERS A DRAW</p>
+  <div class="draw-banner-btns">
+    <button class="draw-accept-btn" onclick="acceptDraw()">✓ ACCEPT</button>
+    <button class="draw-decline-btn" onclick="declineDraw()">✗ DECLINE</button>
   </div>
 </div>
 
@@ -1157,6 +1230,8 @@
         stopLocalTimer();
         clearInterval(updateInterval);
       }
+      // Draw offer state from server
+      handleDrawOfferState(data.drawOffer || null);
     } catch (err) {}
   }
 
@@ -1227,6 +1302,7 @@
     const s = document.getElementById('status'), info = document.getElementById('info');
     if (data.isGameOver) {
       if (data.winner) s.textContent = `${data.winner.toUpperCase()} WINS!`;
+      else if (data.isDraw) s.textContent = '🤝 DRAW BY AGREEMENT';
       else s.textContent = 'GAME OVER';
       s.className = 'checkmate';
       info.textContent = 'Game finished';
@@ -1428,6 +1504,106 @@
     await ensureGameId();
     joinGame();
   })();
+
+  // ── Draw Offer Logic ─────────────────────────────────────────────
+  let drawOfferPending = null;      // whose offer is showing: null | 'white' | 'black'
+  let drawOfferSentByMe = false;    // I sent the current offer
+
+  function updateDrawButton() {
+    const btn = document.getElementById('draw-btn');
+    if (!btn) return;
+    const canOffer = myColor && myColor !== 'spectator' && !gameOver && !waitingForOpponent;
+    btn.disabled = !canOffer || drawOfferPending !== null;
+  }
+
+  function showDrawBanner(show) {
+    const banner = document.getElementById('draw-offer-banner');
+    if (!banner) return;
+    if (show) banner.classList.add('show');
+    else banner.classList.remove('show');
+  }
+
+  function handleDrawOfferState(drawOffer) {
+    // drawOffer = null | 'white' | 'black' (color that offered)
+    if (!drawOffer) {
+      drawOfferPending = null;
+      drawOfferSentByMe = false;
+      showDrawBanner(false);
+      updateDrawButton();
+      return;
+    }
+    if (drawOfferPending === drawOffer) return; // no change
+    drawOfferPending = drawOffer;
+
+    const offererColor = drawOffer;
+    const iAmTheOfferer = myColor === offererColor;
+    drawOfferSentByMe = iAmTheOfferer;
+
+    if (iAmTheOfferer) {
+      // Just show the button as disabled; no banner for sender
+      showDrawBanner(false);
+    } else if (myColor && myColor !== 'spectator') {
+      // I'm the opponent — show the accept/decline banner
+      showDrawBanner(true);
+      tg.HapticFeedback?.notificationOccurred('warning');
+    }
+    updateDrawButton();
+  }
+
+  async function offerDraw() {
+    if (!myColor || myColor === 'spectator' || gameOver || waitingForOpponent || drawOfferPending) return;
+    try {
+      const res = await fetch(`/api/game/${gameId}/draw-offer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        handleDrawOfferState(data.drawOffer);
+        tg.HapticFeedback?.impactOccurred('medium');
+      }
+    } catch (err) { console.error(err); }
+  }
+
+  async function acceptDraw() {
+    try {
+      const res = await fetch(`/api/game/${gameId}/draw-accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      showDrawBanner(false);
+      if (res.ok) {
+        gameOver = true;
+        stopLocalTimer();
+        updateStatus({ isGameOver: true, isDraw: true, winner: null });
+        updatePlayerDisplays(data);
+        renderBoard();
+        tg.HapticFeedback?.notificationOccurred('success');
+      }
+    } catch (err) { console.error(err); }
+  }
+
+  async function declineDraw() {
+    try {
+      await fetch(`/api/game/${gameId}/draw-decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      drawOfferPending = null;
+      showDrawBanner(false);
+      updateDrawButton();
+      tg.HapticFeedback?.impactOccurred('light');
+    } catch (err) { console.error(err); }
+  }
+
+  window.offerDraw   = offerDraw;
+  window.acceptDraw  = acceptDraw;
+  window.declineDraw = declineDraw;
+  // ── End Draw Offer Logic ──────────────────────────────────────────
 
   window.resignGame = resignGame;
   window.newGame = newGame;
