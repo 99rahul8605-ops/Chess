@@ -280,6 +280,11 @@
       grid-template-columns: repeat(8, 12.5%);
       width: 100%;
       aspect-ratio: 1;
+      background: #2a1e0f;
+      color: rgba(201,168,76,0.5);
+      font-family: Georgia, serif;
+      font-size: 0.8rem;
+      letter-spacing: 3px;
     }
     .cell {
       aspect-ratio: 1;
@@ -1365,6 +1370,8 @@
 
   // --- API & Game Flow ---
   async function joinGame() {
+    boardEl.innerHTML = '';
+    boardEl.className = '';
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
         method: 'POST',
@@ -1409,7 +1416,7 @@
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
       const newBoard = fenToBoard(data.fen);
-      if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
+      if (!boardState || JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
         lastMove = data.lastMove;
         selectedSquare = null; possibleMoves = [];
@@ -1464,22 +1471,28 @@
 
   async function resignGame() {
     if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
-    if (!confirm('Are you sure you want to resign?')) return;
-    try {
-      const res = await fetch(`/api/game/${gameId}/resign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        gameOver = true;
-        updateStatus(data);
-        updatePlayerDisplays(data);
-        renderBoard();
-        stopLocalTimer();
+    showConfirm({
+      icon: '🏳️', title: 'RESIGN GAME?',
+      sub: 'You will lose the match.\nThis cannot be undone.',
+      yesLabel: 'RESIGN', yesClass: 'danger',
+      onYes: async () => {
+        try {
+          const res = await fetch(`/api/game/${gameId}/resign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            gameOver = true;
+            updateStatus(data);
+            updatePlayerDisplays(data);
+            renderBoard();
+            stopLocalTimer();
+          }
+        } catch (err) { console.error(err); }
       }
-    } catch (err) { console.error(err); }
+    });
   }
 
   async function newGame() {
@@ -1596,6 +1609,7 @@
 
   function renderBoard() {
     boardEl.innerHTML = '';
+    boardEl.className = '';
     if (!boardState) return;
     for (let dr=0; dr<8; dr++) for (let dc=0; dc<8; dc++) {
       const int = displayToInternal(dr, dc);
@@ -1924,6 +1938,32 @@
 
   window.closeGameOverOverlay = closeGameOverOverlay;
   // ── End Game Over Overlay ────────────────────────────────────────
+
+  // ── Confirm Dialog ──────────────────────────────────────────
+  let _confirmCallback = null;
+  function showConfirm({ icon, title, sub, yesLabel, yesClass, onYes }) {
+    document.getElementById('confirm-icon').textContent  = icon  || '⚠️';
+    document.getElementById('confirm-title').textContent = title || 'ARE YOU SURE?';
+    document.getElementById('confirm-sub').textContent   = sub   || '';
+    const yesBtn = document.getElementById('confirm-yes-btn');
+    yesBtn.textContent = yesLabel || 'CONFIRM';
+    yesBtn.className   = 'confirm-yes ' + (yesClass || 'danger');
+    _confirmCallback   = onYes || null;
+    document.getElementById('confirm-modal').classList.add('show');
+    tg.HapticFeedback?.impactOccurred('medium');
+  }
+  function confirmYes() {
+    document.getElementById('confirm-modal').classList.remove('show');
+    if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
+  }
+  function confirmNo() {
+    document.getElementById('confirm-modal').classList.remove('show');
+    _confirmCallback = null;
+    tg.HapticFeedback?.impactOccurred('light');
+  }
+  window.showConfirm = showConfirm;
+  window.confirmYes  = confirmYes;
+  window.confirmNo   = confirmNo;
 
   window.resignGame = resignGame;
   window.newGame = newGame;
