@@ -246,6 +246,27 @@
       cursor: pointer;
     }
 
+    /* Promotion Modal */
+    .promo-options {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .promo-piece {
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      padding: 5px;
+      background: rgba(0,0,0,0.2);
+    }
+    .promo-piece:hover {
+      border-color: #c9a84c;
+      background: rgba(201,168,76,0.2);
+    }
+
     /* Chat Panel */
     #chat-fab {
       position: fixed; bottom: 22px; right: 18px;
@@ -320,9 +341,7 @@
       color: #c9a84c; font-style: italic;
       font-size: 0.63rem; text-align: center;
     }
-    .chat-msg .msg-text { 
-      color: #eee;
-    }
+    .chat-msg .msg-text { color: #eee; }
 
     #chat-input-row { display: flex; border-top: 1px solid rgba(201,168,76,0.2); }
     #chat-input {
@@ -406,6 +425,20 @@
       </div>
     </div>
     <button class="close-btn" onclick="closeStatsModal()">Close</button>
+  </div>
+</div>
+
+<!-- Promotion Modal -->
+<div id="promotion-modal" class="modal">
+  <div class="modal-content">
+    <h3>Promote Pawn</h3>
+    <div class="promo-options">
+      <div class="promo-piece" data-piece="q">♕</div>
+      <div class="promo-piece" data-piece="r">♖</div>
+      <div class="promo-piece" data-piece="b">♗</div>
+      <div class="promo-piece" data-piece="n">♘</div>
+    </div>
+    <button class="close-btn" onclick="cancelPromotion()">Cancel</button>
   </div>
 </div>
 
@@ -498,14 +531,15 @@
   const boardEl = document.getElementById('board');
   const waitingOverlay = document.getElementById('waiting-overlay');
 
+  // Promotion state
+  let pendingPromotion = null; // { from, to }
+  let promotionResolve = null;
+
   // --- Stats Modal ---
   function showStatsModal(uid, playerName) {
     if (!uid) return;
     fetch(`/api/user/${uid}/stats`)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
+      .then(r => r.json())
       .then(data => {
         document.getElementById('modal-player-name').textContent = playerName;
         document.getElementById('stat-games').textContent = data.stats.gamesPlayed;
@@ -514,10 +548,7 @@
         document.getElementById('stat-draws').textContent = data.stats.draws;
         document.getElementById('stats-modal').style.display = 'flex';
       })
-      .catch(err => {
-        console.error('Stats error:', err);
-        alert('Could not load player stats.');
-      });
+      .catch(err => console.error('Stats error:', err));
   }
 
   window.closeStatsModal = function() {
@@ -564,7 +595,7 @@
     }
   }, 15000);
 
-  // --- Piece SVG (unchanged) ---
+  // --- Piece SVG ---
   function mkPiece(type, isWhite) {
     const f = isWhite ? '#ffffff' : '#1c1c1c';
     const f2 = isWhite ? '#ddd0b8' : '#333333';
@@ -639,10 +670,11 @@
     return files[col] + ranks[row];
   }
 
-  // --- Move generation with check validation ---
+  // --- Move generation with check validation, castling, and promotion detection ---
   function isWhitePiece(p) { return p && p === p.toUpperCase() && p !== p.toLowerCase(); }
   function isBlackPiece(p) { return p && p === p.toLowerCase() && p !== p.toUpperCase(); }
   function getPieceColor(p) { if (!p) return null; return isWhitePiece(p) ? 'white' : 'black'; }
+
   function isSquareAttacked(attackingColor, row, col) {
     const pawnDir = attackingColor === 'white' ? 1 : -1;
     for (let [dr, dc] of [[pawnDir, -1], [pawnDir, 1]]) {
@@ -681,6 +713,7 @@
     }
     return false;
   }
+
   function isMoveLegal(fromRow, fromCol, toRow, toCol, pieceColor) {
     const boardCopy = boardState.map(r=>[...r]);
     boardCopy[toRow][toCol] = boardCopy[fromRow][fromCol];
@@ -695,12 +728,14 @@
     boardState = original;
     return !attacked;
   }
+
   function getMovesFromSquare(row, col) {
     const piece = boardState[row][col];
     if (!piece) return [];
     const pieceType = piece.toUpperCase();
     const pieceColor = getPieceColor(piece);
     const pseudo = [];
+
     function addMoveIfValid(toRow, toCol) {
       if (toRow<0||toRow>7||toCol<0||toCol>7) return false;
       const target = boardState[toRow][toCol];
@@ -710,6 +745,7 @@
         return false;
       } else { pseudo.push({ toRow, toCol, isCapture: false }); return true; }
     }
+
     if (pieceType==='P') {
       const dir = pieceColor==='white' ? -1 : 1;
       const start = pieceColor==='white' ? 6 : 1;
@@ -747,6 +783,7 @@
         }
       }
     } else if (pieceType==='K') {
+      // Normal moves
       for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) if(dr||dc) {
         const nr=row+dr, nc=col+dc;
         if (nr>=0&&nr<8&&nc>=0&&nc<8) {
@@ -755,7 +792,31 @@
           else if (getPieceColor(t)!==pieceColor) pseudo.push({ toRow: nr, toCol: nc, isCapture: true });
         }
       }
+      // Castling (only if king hasn't moved, rook present, squares empty and not attacked)
+      const backRank = pieceColor === 'white' ? 7 : 0;
+      if (row === backRank && col === 4) {
+        // Kingside castling (O-O)
+        if (!isSquareAttacked(pieceColor==='white'?'black':'white', row, col) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 5) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 6) &&
+            !boardState[row][5] && !boardState[row][6] &&
+            boardState[row][7] && boardState[row][7].toUpperCase() === 'R' &&
+            getPieceColor(boardState[row][7]) === pieceColor) {
+          pseudo.push({ toRow: row, toCol: 6, isCapture: false, isCastling: true });
+        }
+        // Queenside castling (O-O-O)
+        if (!isSquareAttacked(pieceColor==='white'?'black':'white', row, col) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 3) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 2) &&
+            !boardState[row][3] && !boardState[row][2] && !boardState[row][1] &&
+            boardState[row][0] && boardState[row][0].toUpperCase() === 'R' &&
+            getPieceColor(boardState[row][0]) === pieceColor) {
+          pseudo.push({ toRow: row, toCol: 2, isCapture: false, isCastling: true });
+        }
+      }
     }
+
+    // Filter illegal moves (king safety)
     return pseudo.filter(m => isMoveLegal(row, col, m.toRow, m.toCol, pieceColor));
   }
 
@@ -777,6 +838,7 @@
       if (currentTurn === 'w') { whiteTime = Math.max(0, whiteTime - 0.1); if (whiteTime<=0) { gameOver=true; clearInterval(localTimerInterval); } }
       else if (currentTurn === 'b') { blackTime = Math.max(0, blackTime - 0.1); if (blackTime<=0) { gameOver=true; clearInterval(localTimerInterval); } }
       updateClockDisplay();
+      if (gameOver) document.getElementById('status').textContent = `${currentTurn==='w'?'BLACK':'WHITE'} WINS ON TIME!`;
     }, 100);
   }
   function syncTimeFromServer(data) {
@@ -784,6 +846,36 @@
     if (data.blackTime !== undefined) blackTime = data.blackTime;
     updateClockDisplay();
   }
+
+  // --- Promotion handling ---
+  function showPromotionModal(from, to) {
+    return new Promise((resolve) => {
+      pendingPromotion = { from, to };
+      promotionResolve = resolve;
+      document.getElementById('promotion-modal').style.display = 'flex';
+    });
+  }
+
+  window.cancelPromotion = function() {
+    document.getElementById('promotion-modal').style.display = 'none';
+    if (promotionResolve) {
+      promotionResolve('q'); // default queen
+      promotionResolve = null;
+    }
+    pendingPromotion = null;
+  };
+
+  // Promotion piece selection
+  document.querySelectorAll('.promo-piece').forEach(el => {
+    el.addEventListener('click', () => {
+      const piece = el.dataset.piece;
+      document.getElementById('promotion-modal').style.display = 'none';
+      if (promotionResolve) {
+        promotionResolve(piece);
+        promotionResolve = null;
+      }
+    });
+  });
 
   // --- API & Game Flow ---
   async function joinGame() {
@@ -847,7 +939,7 @@
     } catch (err) {}
   }
 
-  async function makeMove(fromInt, toInt) {
+  async function makeMove(fromInt, toInt, promotionPiece = 'q') {
     if (waitingForOpponent || gameOver) return;
     const from = coordToAlgebraic(fromInt.row, fromInt.col);
     const to = coordToAlgebraic(toInt.row, toInt.col);
@@ -855,7 +947,7 @@
       const res = await fetch(`/api/game/${gameId}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, from, to, promotion: 'q' })
+        body: JSON.stringify({ userId, from, to, promotion: promotionPiece })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -958,15 +1050,24 @@
     }
   }
 
-  function onCellClick(row, col) {
+  async function onCellClick(row, col) {
     if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
     const myTurn = (myColor==='white' && currentTurn==='w') || (myColor==='black' && currentTurn==='b');
     if (!myTurn) { tg.HapticFeedback.notificationOccurred('warning'); document.getElementById('status').textContent = "Not your turn"; return; }
     const piece = boardState[row][col];
     if (selectedSquare) {
       const move = possibleMoves.find(m => m.toRow===row && m.toCol===col);
-      if (move) { makeMove(selectedSquare, {row, col}); return; }
-      else {
+      if (move) {
+        const pieceMoved = boardState[selectedSquare.row][selectedSquare.col];
+        const isPawn = pieceMoved && pieceMoved.toUpperCase() === 'P';
+        const promotionRank = (myColor === 'white' && row === 0) || (myColor === 'black' && row === 7);
+        let promo = 'q';
+        if (isPawn && promotionRank) {
+          promo = await showPromotionModal(selectedSquare, {row, col});
+        }
+        await makeMove(selectedSquare, {row, col}, promo);
+        return;
+      } else {
         selectedSquare = null; possibleMoves = [];
         renderBoard();
         if (piece) { const c=getPieceColor(piece); if((myColor==='white'&&c==='white')||(myColor==='black'&&c==='black')) { selectedSquare={row,col}; possibleMoves=getMovesFromSquare(row,col); renderBoard(); tg.HapticFeedback.selectionChanged(); } }
