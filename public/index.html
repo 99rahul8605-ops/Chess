@@ -268,6 +268,94 @@
     /* keep old #status hidden but present so JS refs don't break */
     #status { display: none; }
 
+    /* ── Confirm Dialog ── */
+    #confirm-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(3px);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+    }
+    #confirm-modal.show { display: flex; }
+    .confirm-box {
+      background: #1e130a;
+      border: 1.5px solid rgba(201,168,76,0.4);
+      border-radius: 14px;
+      padding: 24px 22px 18px;
+      width: min(290px, 88vw);
+      text-align: center;
+      animation: confirm-pop 0.22s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes confirm-pop {
+      from { transform: scale(0.85); opacity: 0; }
+      to   { transform: scale(1);    opacity: 1; }
+    }
+    .confirm-icon {
+      font-size: 2rem;
+      margin-bottom: 8px;
+      display: block;
+    }
+    .confirm-title {
+      font-family: Georgia, serif;
+      font-size: 0.9rem;
+      letter-spacing: 3px;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .confirm-sub {
+      font-family: Georgia, serif;
+      font-size: 0.65rem;
+      letter-spacing: 1.5px;
+      color: rgba(201,168,76,0.55);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .confirm-btns {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .confirm-yes {
+      flex: 1;
+      font-family: Georgia, serif;
+      font-size: 0.68rem;
+      letter-spacing: 2px;
+      padding: 9px 0;
+      border-radius: 6px;
+      border: 1.5px solid;
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    .confirm-yes.danger {
+      background: rgba(200,40,40,0.12);
+      border-color: #a04040;
+      color: #f0a0a0;
+    }
+    .confirm-yes.danger:hover { background: rgba(200,40,40,0.28); }
+    .confirm-yes.peace {
+      background: rgba(100,176,80,0.1);
+      border-color: #4a7040;
+      color: #a5d6a5;
+    }
+    .confirm-yes.peace:hover { background: rgba(100,176,80,0.25); }
+    .confirm-no {
+      flex: 1;
+      font-family: Georgia, serif;
+      font-size: 0.68rem;
+      letter-spacing: 2px;
+      padding: 9px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(201,168,76,0.2);
+      background: transparent;
+      color: rgba(201,168,76,0.55);
+      cursor: pointer;
+      transition: color 0.18s, border-color 0.18s;
+    }
+    .confirm-no:hover { color: #c9a84c; border-color: rgba(201,168,76,0.5); }
+
     #board-wrap {
       border: 3px solid var(--tg-theme-button-color, #5a3c10);
       box-shadow: 0 8px 40px rgba(0,0,0,0.8);
@@ -794,6 +882,19 @@
       <div class="promo-piece" data-piece="n">♘</div>
     </div>
     <button class="close-btn" onclick="cancelPromotion()">Cancel</button>
+  </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div id="confirm-modal">
+  <div class="confirm-box">
+    <span class="confirm-icon" id="confirm-icon">⚠️</span>
+    <div class="confirm-title" id="confirm-title">ARE YOU SURE?</div>
+    <div class="confirm-sub" id="confirm-sub"></div>
+    <div class="confirm-btns">
+      <button class="confirm-yes danger" id="confirm-yes-btn" onclick="confirmYes()">CONFIRM</button>
+      <button class="confirm-no" onclick="confirmNo()">CANCEL</button>
+    </div>
   </div>
 </div>
 
@@ -1464,22 +1565,31 @@
 
   async function resignGame() {
     if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
-    if (!confirm('Are you sure you want to resign?')) return;
-    try {
-      const res = await fetch(`/api/game/${gameId}/resign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        gameOver = true;
-        updateStatus(data);
-        updatePlayerDisplays(data);
-        renderBoard();
-        stopLocalTimer();
+    showConfirm({
+      icon: '🏳️',
+      title: 'RESIGN GAME?',
+      sub: 'You will lose the match.
+This cannot be undone.',
+      yesLabel: 'RESIGN',
+      yesClass: 'danger',
+      onYes: async () => {
+        try {
+          const res = await fetch(`/api/game/${gameId}/resign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            gameOver = true;
+            updateStatus(data);
+            updatePlayerDisplays(data);
+            renderBoard();
+            stopLocalTimer();
+          }
+        } catch (err) { console.error(err); }
       }
-    } catch (err) { console.error(err); }
+    });
   }
 
   async function newGame() {
@@ -1820,18 +1930,28 @@
 
   async function offerDraw() {
     if (!myColor || myColor === 'spectator' || gameOver || waitingForOpponent || drawOfferPending) return;
-    try {
-      const res = await fetch(`/api/game/${gameId}/draw-offer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        handleDrawOfferState(data.drawOffer);
-        tg.HapticFeedback?.impactOccurred('medium');
+    showConfirm({
+      icon: '🤝',
+      title: 'OFFER A DRAW?',
+      sub: 'Your opponent can accept
+or decline the offer.',
+      yesLabel: 'OFFER DRAW',
+      yesClass: 'peace',
+      onYes: async () => {
+        try {
+          const res = await fetch(`/api/game/${gameId}/draw-offer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            handleDrawOfferState(data.drawOffer);
+            tg.HapticFeedback?.impactOccurred('medium');
+          }
+        } catch (err) { console.error(err); }
       }
-    } catch (err) { console.error(err); }
+    });
   }
 
   async function acceptDraw() {
@@ -1871,6 +1991,37 @@
   window.offerDraw   = offerDraw;
   window.acceptDraw  = acceptDraw;
   window.declineDraw = declineDraw;
+
+  // ── Confirm Dialog ───────────────────────────────────────────────
+  let _confirmCallback = null;
+
+  function showConfirm({ icon, title, sub, yesLabel, yesClass, onYes }) {
+    document.getElementById('confirm-icon').textContent   = icon  || '⚠️';
+    document.getElementById('confirm-title').textContent  = title || 'ARE YOU SURE?';
+    document.getElementById('confirm-sub').textContent    = sub   || '';
+    const yesBtn = document.getElementById('confirm-yes-btn');
+    yesBtn.textContent = yesLabel || 'CONFIRM';
+    yesBtn.className   = 'confirm-yes ' + (yesClass || 'danger');
+    _confirmCallback   = onYes || null;
+    document.getElementById('confirm-modal').classList.add('show');
+    tg.HapticFeedback?.impactOccurred('medium');
+  }
+
+  function confirmYes() {
+    document.getElementById('confirm-modal').classList.remove('show');
+    if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
+  }
+
+  function confirmNo() {
+    document.getElementById('confirm-modal').classList.remove('show');
+    _confirmCallback = null;
+    tg.HapticFeedback?.impactOccurred('light');
+  }
+
+  window.showConfirm = showConfirm;
+  window.confirmYes  = confirmYes;
+  window.confirmNo   = confirmNo;
+  // ── End Confirm Dialog ───────────────────────────────────────────
   // ── End Draw Offer Logic ──────────────────────────────────────────
 
   // ── Game Over Overlay ──────────────────────────────────────────
