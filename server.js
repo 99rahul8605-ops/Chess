@@ -261,6 +261,27 @@ function buildStateResponse(game, gameId) {
   let turn = c.turn();
   let winner = null;
 
+  // Live clock: subtract elapsed time since last move for the active player.
+  // This makes every poll return the true live remaining time, not a frozen snapshot.
+  let liveWhiteTime = game.whiteTime;
+  let liveBlackTime = game.blackTime;
+  const gameStarted = !!(game.whiteUserId && game.blackUserId);
+  if (gameStarted && !gameOver && game.lastMoveTimestamp) {
+    const elapsedSec = (Date.now() - game.lastMoveTimestamp) / 1000;
+    if (turn === 'w') {
+      liveWhiteTime = Math.max(0, game.whiteTime - elapsedSec);
+    } else {
+      liveBlackTime = Math.max(0, game.blackTime - elapsedSec);
+    }
+    if (liveWhiteTime <= 0 && !game.gameOverByTime) {
+      game.gameOverByTime = true; game.whiteTime = 0; liveWhiteTime = 0;
+    }
+    if (liveBlackTime <= 0 && !game.gameOverByTime) {
+      game.gameOverByTime = true; game.blackTime = 0; liveBlackTime = 0;
+    }
+    gameOver = c.isGameOver() || game.gameOverByTime;
+  }
+
   const timeOutResult = checkTimeOut(game);
   if (timeOutResult) {
     gameOver = true;
@@ -286,8 +307,8 @@ function buildStateResponse(game, gameId) {
     isDraw: draw,
     inCheck,
     winner,
-    whiteTime: game.whiteTime,
-    blackTime: game.blackTime,
+    whiteTime: liveWhiteTime,
+    blackTime: liveBlackTime,
     lastMoveTimestamp: game.lastMoveTimestamp,
     whiteUserId: game.whiteUserId,
     blackUserId: game.blackUserId,
