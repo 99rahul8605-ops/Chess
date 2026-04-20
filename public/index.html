@@ -1068,34 +1068,24 @@
   }
 
   function syncTimeFromServer(data) {
-    // Capture initial total for ring-progress ratio
+    // Track initial time for ring-progress ratio (only grows if server sends bigger value)
     if (data.whiteTime !== undefined) {
       if (timerInitialWhite <= 0 || data.whiteTime > timerInitialWhite) timerInitialWhite = data.whiteTime;
+      // Accept server's live time — it already has elapsed subtracted
+      whiteTime = data.whiteTime;
     }
     if (data.blackTime !== undefined) {
       if (timerInitialBlack <= 0 || data.blackTime > timerInitialBlack) timerInitialBlack = data.blackTime;
+      blackTime = data.blackTime;
     }
-
-    const turnChanged = data.turn !== undefined && data.turn !== timerAnchorTurn;
-
-    // Update authoritative values
-    if (data.whiteTime !== undefined) whiteTime = data.whiteTime;
-    if (data.blackTime !== undefined) blackTime = data.blackTime;
 
     if (gameOver || waitingForOpponent) {
-      stopLocalTimer();
-      updateClockDisplay();
-      return;
+      stopLocalTimer(); updateClockDisplay(); return;
     }
 
-    if (!timerRAF || turnChanged) {
-      // Timer was stopped, or turn changed (after a move) — do a full restart with new anchor
-      startLocalTimer();
-    } else {
-      // Timer already running for same turn — just refresh the anchor so accumulated
-      // server-corrected time replaces local drift, without interrupting the loop.
-      setTimerAnchor();
-    }
+    // Always re-anchor from server values so the local countdown starts
+    // from the correct live time rather than drifting from an old base.
+    startLocalTimer();
   }
   // ── End Advanced Clock System ─────────────────────────────────────
 
