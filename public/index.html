@@ -79,35 +79,112 @@
       gap: 4px;
     }
 
+    /* ── Advanced Clock ── */
     #clocks {
       display: flex;
       justify-content: space-between;
       width: 100%;
       max-width: 576px;
       margin-bottom: 8px;
-      gap: 12px;
+      gap: 10px;
     }
-    .clock {
-      background: rgba(0,0,0,0.4);
-      padding: 6px 16px;
-      border-radius: 30px;
-      font-size: 1.2rem;
-      font-family: monospace;
-      letter-spacing: 2px;
-      border: 1px solid var(--tg-theme-button-color, #4a3010);
-      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-      text-align: center;
+
+    .clock-wrap {
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
     }
-    .clock.active {
-      border-color: #64b050;
-      color: #a5d6a5;
-      box-shadow: 0 0 8px #4caf50;
+
+    .clock-svg-ring {
+      width: 100%;
+      max-width: 140px;
+      height: auto;
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.7));
+      transition: filter 0.3s;
     }
-    .clock.low-time {
-      color: #e84040;
-      border-color: #e84040;
+
+    /* Ring track */
+    .ring-track {
+      fill: none;
+      stroke: rgba(255,255,255,0.06);
+      stroke-width: 5;
     }
+    /* Ring progress */
+    .ring-progress {
+      fill: none;
+      stroke-width: 5;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.18s linear, stroke 0.4s ease;
+      transform-origin: center;
+      transform: rotate(-90deg);
+    }
+    .ring-bg-circle {
+      fill: #140d04;
+      stroke: rgba(201,168,76,0.18);
+      stroke-width: 1.5;
+    }
+    .ring-bg-circle-inner {
+      fill: #1a1005;
+    }
+
+    /* Digit display inside ring */
+    .clock-digits {
+      font-family: 'Courier New', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      fill: #c9a84c;
+      letter-spacing: 2px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      transition: fill 0.3s;
+    }
+    .clock-label {
+      font-family: Georgia, serif;
+      font-size: 7px;
+      fill: rgba(201,168,76,0.5);
+      text-anchor: middle;
+      dominant-baseline: middle;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    /* Active state — glow ring + bright digits */
+    .clock-wrap.active .ring-progress {
+      filter: drop-shadow(0 0 4px currentColor);
+    }
+    .clock-wrap.active .clock-digits {
+      fill: #e8d06a;
+    }
+    .clock-wrap.active .clock-svg-ring {
+      filter: drop-shadow(0 0 12px rgba(100,176,80,0.55)) drop-shadow(0 2px 8px rgba(0,0,0,0.7));
+    }
+
+    /* Low-time — red + urgent pulse */
+    .clock-wrap.low-time .ring-progress { stroke: #e84040 !important; }
+    .clock-wrap.low-time .clock-digits  { fill: #ff6060 !important; animation: clock-urgent-pulse 0.6s ease-in-out infinite alternate; }
+    .clock-wrap.low-time .clock-svg-ring { filter: drop-shadow(0 0 14px rgba(232,64,64,0.7)) drop-shadow(0 2px 8px rgba(0,0,0,0.7)); }
+    .clock-wrap.low-time .ring-bg-circle { stroke: rgba(232,64,64,0.35); }
+
+    /* Critical (<10s) — faster pulse */
+    .clock-wrap.critical .clock-digits { animation: clock-critical-pulse 0.3s ease-in-out infinite alternate !important; }
+
+    @keyframes clock-urgent-pulse {
+      from { opacity: 1; }
+      to   { opacity: 0.45; }
+    }
+    @keyframes clock-critical-pulse {
+      from { opacity: 1;   transform: scale(1); }
+      to   { opacity: 0.3; transform: scale(0.96); }
+    }
+
+    /* Tick flash on each second */
+    .clock-wrap.tick-flash .clock-digits { fill: #ffffff !important; }
+
+    /* Inactive dimmed */
+    .clock-wrap:not(.active):not(.low-time) .clock-digits { fill: rgba(201,168,76,0.45); }
+    .clock-wrap:not(.active):not(.low-time) .ring-progress { opacity: 0.35; }
 
     #status {
       font-size: 0.72rem; letter-spacing: 3px; min-height: 22px; margin-bottom: 8px;
@@ -383,8 +460,51 @@
 </div>
 
 <div id="clocks">
-  <div id="white-clock" class="clock">10:00</div>
-  <div id="black-clock" class="clock">10:00</div>
+  <!-- White clock -->
+  <div class="clock-wrap" id="white-clock-wrap">
+    <svg class="clock-svg-ring" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="wBg" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#2a1e0f"/>
+          <stop offset="100%" stop-color="#140d04"/>
+        </radialGradient>
+      </defs>
+      <!-- outer glow ring bg -->
+      <circle class="ring-bg-circle" cx="60" cy="60" r="55"/>
+      <circle class="ring-bg-circle-inner" cx="60" cy="60" r="49"/>
+      <!-- track -->
+      <circle class="ring-track" cx="60" cy="60" r="50"/>
+      <!-- progress -->
+      <circle class="ring-progress" id="white-ring" cx="60" cy="60" r="50"
+              stroke="#64b050"
+              stroke-dasharray="314.16"
+              stroke-dashoffset="0"/>
+      <!-- time text -->
+      <text class="clock-digits" id="white-clock" x="60" y="57">10:00</text>
+      <text class="clock-label" x="60" y="73">WHITE</text>
+    </svg>
+  </div>
+
+  <!-- Black clock -->
+  <div class="clock-wrap" id="black-clock-wrap">
+    <svg class="clock-svg-ring" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="bBg" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#2a1e0f"/>
+          <stop offset="100%" stop-color="#140d04"/>
+        </radialGradient>
+      </defs>
+      <circle class="ring-bg-circle" cx="60" cy="60" r="55"/>
+      <circle class="ring-bg-circle-inner" cx="60" cy="60" r="49"/>
+      <circle class="ring-track" cx="60" cy="60" r="50"/>
+      <circle class="ring-progress" id="black-ring" cx="60" cy="60" r="50"
+              stroke="#64b050"
+              stroke-dasharray="314.16"
+              stroke-dashoffset="0"/>
+      <text class="clock-digits" id="black-clock" x="60" y="57">10:00</text>
+      <text class="clock-label" x="60" y="73">BLACK</text>
+    </svg>
+  </div>
 </div>
 
 <div id="status">Connecting...</div>
@@ -817,75 +937,167 @@
     return pseudo.filter(m => isMoveLegal(row, col, m.toRow, m.toCol, pieceColor));
   }
 
-  // --- Clock display & management ---
-  function formatTime(s) { 
-    if (s < 0) s = 0;
+  // ── Advanced Clock System ──────────────────────────────────────────
+  // Uses performance.now() for sub-millisecond accuracy.
+  // Ring circumference = 2π × 50 ≈ 314.16
+
+  const RING_CIRC = 314.16;
+  let timerRAF = null;
+  let timerInitialWhite = 600;
+  let timerInitialBlack = 600;
+  let lastSecondWhite = -1;
+  let lastSecondBlack = -1;
+
+  // Wall-clock anchor: when the current timer segment started and what the time was then.
+  // This means server syncs just update the anchor — the RAF loop never resets.
+  let timerAnchorTs = null;    // performance.now() value at last anchor set
+  let timerAnchorWt = null;    // whiteTime at last anchor
+  let timerAnchorBt = null;    // blackTime at last anchor
+  let timerAnchorTurn = null;  // whose turn at last anchor
+
+  function formatTime(s) {
+    if (s <= 0) return '0:00';
     const mins = Math.floor(s / 60);
     const secs = Math.floor(s % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }
 
+  function setRingProgress(ringEl, current, total) {
+    if (!ringEl) return;
+    const ratio = total > 0 ? Math.max(0, Math.min(1, current / total)) : 0;
+    ringEl.style.strokeDashoffset = RING_CIRC * (1 - ratio);
+    if (ratio > 0.5)       ringEl.style.stroke = '#64b050';
+    else if (ratio > 0.25) ringEl.style.stroke = '#c9a84c';
+    else if (ratio > 0.1)  ringEl.style.stroke = '#e07020';
+    else                   ringEl.style.stroke = '#e84040';
+  }
+
+  function tickFlash(wrapId) {
+    const el = document.getElementById(wrapId);
+    if (!el) return;
+    el.classList.add('tick-flash');
+    setTimeout(() => el.classList.remove('tick-flash'), 120);
+  }
+
   function updateClockDisplay() {
-    document.getElementById('white-clock').textContent = formatTime(whiteTime);
-    document.getElementById('black-clock').textContent = formatTime(blackTime);
-    const wc = document.getElementById('white-clock'), bc = document.getElementById('black-clock');
-    wc.classList.toggle('active', currentTurn === 'w' && !gameOver && !waitingForOpponent);
-    bc.classList.toggle('active', currentTurn === 'b' && !gameOver && !waitingForOpponent);
-    wc.classList.toggle('low-time', whiteTime < 30);
-    bc.classList.toggle('low-time', blackTime < 30);
+    const wText = document.getElementById('white-clock');
+    const bText = document.getElementById('black-clock');
+    const wWrap = document.getElementById('white-clock-wrap');
+    const bWrap = document.getElementById('black-clock-wrap');
+    const wRing = document.getElementById('white-ring');
+    const bRing = document.getElementById('black-ring');
+
+    if (wText) wText.textContent = formatTime(whiteTime);
+    if (bText) bText.textContent = formatTime(blackTime);
+
+    setRingProgress(wRing, whiteTime, timerInitialWhite);
+    setRingProgress(bRing, blackTime, timerInitialBlack);
+
+    const wActive = currentTurn === 'w' && !gameOver && !waitingForOpponent;
+    const bActive = currentTurn === 'b' && !gameOver && !waitingForOpponent;
+
+    if (wWrap) {
+      wWrap.classList.toggle('active',    wActive);
+      wWrap.classList.toggle('low-time',  whiteTime < 30 && whiteTime > 0);
+      wWrap.classList.toggle('critical',  whiteTime < 10 && whiteTime > 0);
+    }
+    if (bWrap) {
+      bWrap.classList.toggle('active',    bActive);
+      bWrap.classList.toggle('low-time',  blackTime < 30 && blackTime > 0);
+      bWrap.classList.toggle('critical',  blackTime < 10 && blackTime > 0);
+    }
+
+    // Tick-flash once per second
+    const ws = Math.floor(whiteTime), bs = Math.floor(blackTime);
+    if (wActive && ws !== lastSecondWhite) { lastSecondWhite = ws; tickFlash('white-clock-wrap'); }
+    if (bActive && bs !== lastSecondBlack) { lastSecondBlack = bs; tickFlash('black-clock-wrap'); }
   }
 
   function stopLocalTimer() {
-    if (localTimerInterval) {
-      clearInterval(localTimerInterval);
-      localTimerInterval = null;
-    }
+    if (timerRAF) { cancelAnimationFrame(timerRAF); timerRAF = null; }
+    timerAnchorTs = null;
+  }
+
+  function setTimerAnchor() {
+    // Record current moment as the reference point for the running clock.
+    timerAnchorTs   = performance.now();
+    timerAnchorWt   = whiteTime;
+    timerAnchorBt   = blackTime;
+    timerAnchorTurn = currentTurn;
   }
 
   function startLocalTimer() {
-    stopLocalTimer(); // ensure only one timer runs
-    if (gameOver || waitingForOpponent) return;
-    localTimerInterval = setInterval(() => {
-      // Double-check conditions inside interval in case they changed
-      if (gameOver || waitingForOpponent) {
-        stopLocalTimer();
+    stopLocalTimer();
+    if (waitingForOpponent || gameOver) { updateClockDisplay(); return; }
+
+    setTimerAnchor();
+
+    function rafLoop(ts) {
+      // Compute elapsed since the last anchor (in seconds)
+      const elapsed = (performance.now() - timerAnchorTs) / 1000;
+
+      // Derive current times from anchor — no accumulation error
+      if (timerAnchorTurn === 'w') {
+        whiteTime = Math.max(0, timerAnchorWt - elapsed);
+        blackTime = timerAnchorBt;
+      } else if (timerAnchorTurn === 'b') {
+        blackTime = Math.max(0, timerAnchorBt - elapsed);
+        whiteTime = timerAnchorWt;
+      }
+
+      updateClockDisplay();
+
+      // Check time-out
+      if (timerAnchorTurn === 'w' && whiteTime <= 0) {
+        whiteTime = 0; gameOver = true; stopLocalTimer(); updateClockDisplay();
+        document.getElementById('status').textContent = 'BLACK WINS ON TIME!';
+        document.getElementById('status').className = 'checkmate';
         return;
       }
-      if (currentTurn === 'w') {
-        whiteTime = Math.max(0, whiteTime - 0.1);
-        if (whiteTime <= 0) {
-          gameOver = true;
-          stopLocalTimer();
-          document.getElementById('status').textContent = 'BLACK WINS ON TIME!';
-          document.getElementById('status').className = 'checkmate';
-        }
-      } else if (currentTurn === 'b') {
-        blackTime = Math.max(0, blackTime - 0.1);
-        if (blackTime <= 0) {
-          gameOver = true;
-          stopLocalTimer();
-          document.getElementById('status').textContent = 'WHITE WINS ON TIME!';
-          document.getElementById('status').className = 'checkmate';
-        }
+      if (timerAnchorTurn === 'b' && blackTime <= 0) {
+        blackTime = 0; gameOver = true; stopLocalTimer(); updateClockDisplay();
+        document.getElementById('status').textContent = 'WHITE WINS ON TIME!';
+        document.getElementById('status').className = 'checkmate';
+        return;
       }
-      updateClockDisplay();
-    }, 100);
+
+      timerRAF = requestAnimationFrame(rafLoop);
+    }
+
+    timerRAF = requestAnimationFrame(rafLoop);
   }
 
   function syncTimeFromServer(data) {
+    // Capture initial total for ring-progress ratio
+    if (data.whiteTime !== undefined) {
+      if (timerInitialWhite <= 0 || data.whiteTime > timerInitialWhite) timerInitialWhite = data.whiteTime;
+    }
+    if (data.blackTime !== undefined) {
+      if (timerInitialBlack <= 0 || data.blackTime > timerInitialBlack) timerInitialBlack = data.blackTime;
+    }
+
+    const turnChanged = data.turn !== undefined && data.turn !== timerAnchorTurn;
+
+    // Update authoritative values
     if (data.whiteTime !== undefined) whiteTime = data.whiteTime;
     if (data.blackTime !== undefined) blackTime = data.blackTime;
-    updateClockDisplay();
-  }
 
-  // Manage timer based on current state
-  function manageTimer() {
     if (gameOver || waitingForOpponent) {
       stopLocalTimer();
-    } else {
+      updateClockDisplay();
+      return;
+    }
+
+    if (!timerRAF || turnChanged) {
+      // Timer was stopped, or turn changed (after a move) — do a full restart with new anchor
       startLocalTimer();
+    } else {
+      // Timer already running for same turn — just refresh the anchor so accumulated
+      // server-corrected time replaces local drift, without interrupting the loop.
+      setTimerAnchor();
     }
   }
+  // ── End Advanced Clock System ─────────────────────────────────────
 
   // --- Promotion handling ---
   function showPromotionModal(from, to) {
@@ -936,7 +1148,6 @@
       toggleWaitingOverlay(waitingForOpponent);
       renderBoard();
       updateStatus(data);
-      manageTimer(); // Start timer only if game active
       startPolling();
     } catch (err) {
       document.getElementById('status').textContent = 'Failed to join.';
@@ -974,7 +1185,6 @@
         toggleWaitingOverlay(waitingForOpponent);
         if (!waitingForOpponent) renderBoard();
       }
-      manageTimer(); // Re-evaluate timer after state update
       if (gameOver) {
         stopLocalTimer();
         clearInterval(updateInterval);
@@ -1004,7 +1214,6 @@
         renderBoard();
         updateStatus(data);
         tg.HapticFeedback.impactOccurred('light');
-        manageTimer(); // Restart timer with new turn/time
         if (gameOver) stopLocalTimer();
       } else {
         document.getElementById('status').textContent = `Invalid: ${data.error||'move'}`;
@@ -1028,10 +1237,10 @@
       const data = await res.json();
       if (res.ok) {
         gameOver = true;
-        stopLocalTimer();
         updateStatus(data);
         updatePlayerDisplays(data);
         renderBoard();
+        stopLocalTimer();
       }
     } catch (err) { console.error(err); }
   }
