@@ -1512,8 +1512,6 @@
 
   // --- API & Game Flow ---
   async function joinGame() {
-    // Clear any stale "Loading game..." text immediately
-    boardEl.innerHTML = '';
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
         method: 'POST',
@@ -1534,8 +1532,8 @@
       updateStatus(data);
       startPolling();
     } catch (err) {
-      console.error('joinGame error:', err);
-      boardEl.innerHTML = '<div style="color:#e84040;text-align:center;padding:20px;font-family:Georgia,serif;font-size:0.8rem;letter-spacing:2px">CONNECTION ERROR<br><br><small>Check your internet and reload</small></div>';
+      document.getElementById('status').textContent = 'Failed to join.';
+      boardEl.innerHTML = `<div class="error">${err.message}</div>`;
     }
   }
 
@@ -1558,7 +1556,7 @@
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
       const newBoard = fenToBoard(data.fen);
-      if (!boardState || JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
+      if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
         lastMove = data.lastMove;
         selectedSquare = null; possibleMoves = [];
