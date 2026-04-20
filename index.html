@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Chess Mini App</title>
+  <title>♜ Chess · Time Control</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,6 +15,100 @@
       padding: 12px;
     }
     h2 { font-size: 1.3rem; letter-spacing: 5px; margin-bottom: 5px; }
+
+    .players-container {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 576px;
+      margin-bottom: 8px;
+      gap: 10px;
+    }
+    .player-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,0,0,0.3);
+      padding: 4px 12px;
+      border-radius: 30px;
+      border: 1px solid var(--tg-theme-button-color, #4a3010);
+      flex: 1;
+      cursor: pointer;
+    }
+    .player-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #5a3c10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: #c9a84c;
+      overflow: hidden;
+    }
+    .player-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .player-info {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .player-name {
+      font-size: 0.8rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 120px;
+    }
+    .player-color-badge {
+      font-size: 0.6rem;
+      opacity: 0.8;
+    }
+    .spectator-badge {
+      background: rgba(0,0,0,0.4);
+      padding: 2px 12px;
+      border-radius: 20px;
+      font-size: 0.65rem;
+      border: 1px dashed var(--tg-theme-button-color);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #clocks {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 576px;
+      margin-bottom: 8px;
+      gap: 12px;
+    }
+    .clock {
+      background: rgba(0,0,0,0.4);
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 1.2rem;
+      font-family: monospace;
+      letter-spacing: 2px;
+      border: 1px solid var(--tg-theme-button-color, #4a3010);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      text-align: center;
+      flex: 1;
+    }
+    .clock.active {
+      border-color: #64b050;
+      color: #a5d6a5;
+      box-shadow: 0 0 8px #4caf50;
+    }
+    .clock.low-time {
+      color: #e84040;
+      border-color: #e84040;
+    }
+
     #status {
       font-size: 0.72rem; letter-spacing: 3px; min-height: 22px; margin-bottom: 8px;
       text-align: center;
@@ -22,11 +116,13 @@
     #status.check { color: #e84040; animation: pulse 0.5s infinite alternate; }
     #status.checkmate { color: #e82020; font-weight: bold; }
     @keyframes pulse { from{opacity:1} to{opacity:0.2} }
+
     #board-wrap {
       border: 3px solid var(--tg-theme-button-color, #5a3c10);
       box-shadow: 0 8px 40px rgba(0,0,0,0.8);
       width: 100%;
       max-width: 576px;
+      position: relative;
     }
     #board {
       display: grid;
@@ -46,7 +142,6 @@
     .in-check     { background: rgba(210,20,20,0.7) !important; }
     .cell svg { width: 88%; height: 88%; display: block; }
 
-    /* Move hint styles */
     .move-dot::after {
       content: '';
       position: absolute;
@@ -64,6 +159,24 @@
       box-shadow: inset 0 0 0 3.5px #4CAF50 !important;
     }
 
+    #waiting-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(30,19,10,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      z-index: 10;
+      border-radius: inherit;
+    }
+    .waiting-message {
+      text-align: center;
+      font-size: 1.2rem;
+      letter-spacing: 3px;
+      color: #c9a84c;
+    }
+
     #controls {
       margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
     }
@@ -77,19 +190,276 @@
       border: 1.5px solid var(--tg-theme-button-color, #4a3010); cursor: pointer;
     }
     button:hover { background: rgba(201,168,76,0.08); }
-    #player-color { font-size: 0.7rem; margin-bottom: 5px; padding: 3px 10px; background: rgba(0,0,0,0.3); border-radius: 20px; }
-    .loading, .error { text-align: center; padding: 20px; }
-    .error { color: #e84040; }
+    #resign-btn {
+      background: rgba(200, 40, 40, 0.1);
+      border-color: #a04040;
+      color: #e0a0a0;
+    }
+
+    /* Stats Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-content {
+      background: var(--tg-theme-bg-color, #2a1e0f);
+      border: 2px solid var(--tg-theme-button-color, #c9a84c);
+      border-radius: 16px;
+      padding: 20px;
+      max-width: 300px;
+      width: 90%;
+      text-align: center;
+    }
+    .modal-content h3 { margin-bottom: 15px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 15px 0;
+    }
+    .stat-item {
+      background: rgba(0,0,0,0.3);
+      padding: 8px;
+      border-radius: 8px;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #c9a84c;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      opacity: 0.8;
+    }
+    .close-btn {
+      margin-top: 10px;
+      padding: 8px 20px;
+      background: var(--tg-theme-button-color, #5a3c10);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    /* Promotion Modal */
+    .promo-options {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .promo-piece {
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      padding: 5px;
+      background: rgba(0,0,0,0.2);
+    }
+    .promo-piece:hover {
+      border-color: #c9a84c;
+      background: rgba(201,168,76,0.2);
+    }
+
+    /* Chat Panel */
+    #chat-fab {
+      position: fixed; bottom: 22px; right: 18px;
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--tg-theme-button-color, #5a3c10);
+      border: 2px solid rgba(201,168,76,0.5);
+      color: #c9a84c; font-size: 1.35rem;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+      z-index: 100;
+      transition: transform 0.15s;
+    }
+    #chat-fab:active { transform: scale(0.92); }
+
+    #chat-badge {
+      position: absolute; top: -4px; right: -4px;
+      background: #e84040; color: #fff;
+      font-size: 0.55rem; font-family: Georgia, serif;
+      width: 17px; height: 17px; border-radius: 50%;
+      display: none; align-items: center; justify-content: center;
+      font-weight: bold;
+    }
+
+    #chat-panel {
+      position: fixed; bottom: 80px; right: 12px;
+      width: min(340px, calc(100vw - 24px));
+      background: #1a0f06;
+      border: 1.5px solid rgba(201,168,76,0.35);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+      display: none; flex-direction: column;
+      z-index: 99;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #chat-panel.open { display: flex; }
+
+    #chat-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 12px;
+      border-bottom: 1px solid rgba(201,168,76,0.2);
+      font-size: 0.63rem; letter-spacing: 3px;
+      color: #c9a84c;
+    }
+    #chat-close {
+      background: none; border: none; cursor: pointer;
+      color: rgba(201,168,76,0.7); font-size: 1rem; padding: 0 2px;
+      line-height: 1;
+    }
+    #chat-close:hover { color: #c9a84c; }
+
+    #chat-messages {
+      height: 200px; overflow-y: auto;
+      padding: 8px 10px;
+      display: flex; flex-direction: column; gap: 5px;
+      scroll-behavior: smooth;
+    }
+    #chat-messages::-webkit-scrollbar { width: 3px; }
+    #chat-messages::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); }
+
+    .chat-msg { 
+      font-size: 0.7rem; line-height: 1.45; word-break: break-word; 
+      color: #ddd;
+    }
+    .chat-msg .msg-name { 
+      font-size: 0.62rem; letter-spacing: 1px; margin-right: 5px; 
+      font-weight: bold;
+    }
+    .chat-msg.white    .msg-name { color: #f0d9b5; }
+    .chat-msg.black    .msg-name { color: #b58863; }
+    .chat-msg.spectator .msg-name { color: #aaa; }
+    .chat-msg.system {
+      color: #c9a84c; font-style: italic;
+      font-size: 0.63rem; text-align: center;
+    }
+    .chat-msg .msg-text { color: #eee; }
+
+    #chat-input-row { display: flex; border-top: 1px solid rgba(201,168,76,0.2); }
+    #chat-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      font-family: Georgia, serif; font-size: 0.72rem;
+      color: #eee;
+      padding: 9px 10px; letter-spacing: 1px;
+    }
+    #chat-input::placeholder { color: rgba(201,168,76,0.5); }
+    #chat-send {
+      border: none; border-left: 1px solid rgba(201,168,76,0.2);
+      background: transparent; color: #c9a84c;
+      padding: 0 14px; cursor: pointer; font-size: 1rem;
+    }
+    #chat-send:hover { background: rgba(201,168,76,0.1); }
   </style>
 </head>
 <body>
 <h2>♜ CHESS ♞</h2>
-<div id="player-color"></div>
+
+<div class="players-container">
+  <div class="player-card" id="white-player-card">
+    <div class="player-avatar" id="white-avatar">♔</div>
+    <div class="player-info">
+      <span class="player-name" id="white-name">White</span>
+      <span class="player-color-badge">⚪ White</span>
+    </div>
+  </div>
+  <div class="spectator-badge" id="spectator-count">
+    👁️ <span id="spec-count">0</span>
+  </div>
+  <div class="player-card" id="black-player-card">
+    <div class="player-avatar" id="black-avatar">♚</div>
+    <div class="player-info">
+      <span class="player-name" id="black-name">Black</span>
+      <span class="player-color-badge">⚫ Black</span>
+    </div>
+  </div>
+</div>
+
+<div id="clocks">
+  <div id="white-clock" class="clock">10:00</div>
+  <div id="black-clock" class="clock">10:00</div>
+</div>
+
 <div id="status">Connecting...</div>
-<div id="board-wrap"><div id="board" class="loading">Loading game...</div></div>
+
+<div id="board-wrap">
+  <div id="board" class="loading">Loading game...</div>
+  <div id="waiting-overlay" style="display: none;">
+    <div class="waiting-message">⏳ WAITING FOR OPPONENT...</div>
+  </div>
+</div>
+
 <div id="controls">
   <div id="info"></div>
-  <button onclick="location.reload()">⟳ NEW GAME</button>
+  <button id="resign-btn" onclick="resignGame()">🏳️ RESIGN</button>
+  <button onclick="newGame()">⟳ NEW GAME</button>
+</div>
+
+<!-- Stats Modal -->
+<div id="stats-modal" class="modal">
+  <div class="modal-content">
+    <h3 id="modal-player-name">Player Stats</h3>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-value" id="stat-games">0</div>
+        <div class="stat-label">Games</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-wins">0</div>
+        <div class="stat-label">Wins</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-losses">0</div>
+        <div class="stat-label">Losses</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-draws">0</div>
+        <div class="stat-label">Draws</div>
+      </div>
+    </div>
+    <button class="close-btn" onclick="closeStatsModal()">Close</button>
+  </div>
+</div>
+
+<!-- Promotion Modal -->
+<div id="promotion-modal" class="modal">
+  <div class="modal-content">
+    <h3>Promote Pawn</h3>
+    <div class="promo-options">
+      <div class="promo-piece" data-piece="q">♕</div>
+      <div class="promo-piece" data-piece="r">♖</div>
+      <div class="promo-piece" data-piece="b">♗</div>
+      <div class="promo-piece" data-piece="n">♘</div>
+    </div>
+    <button class="close-btn" onclick="cancelPromotion()">Cancel</button>
+  </div>
+</div>
+
+<!-- Chat UI -->
+<button id="chat-fab" onclick="toggleChat()">
+  💬
+  <span id="chat-badge"></span>
+</button>
+
+<div id="chat-panel">
+  <div id="chat-panel-header">
+    <span>💬 GAME CHAT</span>
+    <button id="chat-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div id="chat-messages">
+    <div class="chat-msg system">Chat with your opponent...</div>
+  </div>
+  <div id="chat-input-row">
+    <input id="chat-input" type="text" placeholder="Type a message..." maxlength="200" autocomplete="off" />
+    <button id="chat-send" onclick="sendChatMessage()">➤</button>
+  </div>
 </div>
 
 <script>
@@ -97,7 +467,7 @@
   tg.expand();
   tg.ready();
 
-  // Get user ID – fallback if not available
+  // --- User ID & Info ---
   const user = tg.initDataUnsafe?.user;
   let userId = user ? user.id.toString() : null;
   if (!userId) {
@@ -107,32 +477,125 @@
       localStorage.setItem('chess_anon_id', storedId);
     }
     userId = storedId;
-    console.warn('No Telegram user, using anonymous ID:', userId);
   }
 
-  // Read gameId from Telegram start_param or URL ?game=
+  function getUserInfo() {
+    if (user) {
+      return {
+        id: user.id,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        username: user.username,
+        photoUrl: user.photo_url || null
+      };
+    }
+    return { id: userId, firstName: 'Anonymous', lastName: '', photoUrl: null };
+  }
+  const userInfo = getUserInfo();
+
   const startParam = tg.initDataUnsafe?.start_param;
   const urlParams = new URLSearchParams(window.location.search);
-  const gameId = startParam || urlParams.get('game');
+  let gameId = startParam || urlParams.get('game');
 
-  console.log('start_param:', startParam, '| url game:', urlParams.get('game'), '| using:', gameId);
-
-  if (!gameId) {
-    document.getElementById('board').innerHTML = '<div class="error">No game specified. Please use the bot button.</div>';
-    document.getElementById('status').textContent = 'INVALID GAME';
-    throw new Error('No game ID');
+  async function ensureGameId() {
+    if (!gameId) {
+      try {
+        const res = await fetch('/api/game/new', { method: 'POST' });
+        const data = await res.json();
+        gameId = data.gameId;
+        const url = new URL(window.location);
+        url.searchParams.set('game', gameId);
+        window.history.replaceState({}, '', url);
+      } catch (e) {
+        document.getElementById('board').innerHTML = '<div class="error">Could not create game.</div>';
+        throw e;
+      }
+    }
   }
 
+  // --- State ---
   let myColor = null;
-  let selectedSquare = null;          // internal coordinates {row, col} (White perspective)
-  let possibleMoves = [];             // array of {toRow, toCol, isCapture}
-  let boardState = null;              // internal board (White perspective)
-  let lastMove = null;               // { from, to } in algebraic
+  let selectedSquare = null;
+  let possibleMoves = [];
+  let boardState = null;
+  let lastMove = null;
   let updateInterval = null;
   let waitingForOpponent = true;
-  let currentTurn = 'w';             // 'w' or 'b' from latest game state
+  let currentTurn = 'w';
+  let gameOver = false;
+  let whiteUserId = null, blackUserId = null;
 
-  // --- Piece SVG (unchanged) ---
+  let whiteTime = 600, blackTime = 600;
+  let localTimerInterval = null;
+
+  const boardEl = document.getElementById('board');
+  const waitingOverlay = document.getElementById('waiting-overlay');
+
+  // Promotion state
+  let pendingPromotion = null;
+  let promotionResolve = null;
+
+  // --- Stats Modal ---
+  function showStatsModal(uid, playerName) {
+    if (!uid) return;
+    fetch(`/api/user/${uid}/stats`)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('modal-player-name').textContent = playerName;
+        document.getElementById('stat-games').textContent = data.stats.gamesPlayed;
+        document.getElementById('stat-wins').textContent = data.stats.wins;
+        document.getElementById('stat-losses').textContent = data.stats.losses;
+        document.getElementById('stat-draws').textContent = data.stats.draws;
+        document.getElementById('stats-modal').style.display = 'flex';
+      })
+      .catch(err => console.error('Stats error:', err));
+  }
+
+  window.closeStatsModal = function() {
+    document.getElementById('stats-modal').style.display = 'none';
+  };
+
+  document.getElementById('white-player-card').addEventListener('click', () => {
+    if (whiteUserId) showStatsModal(whiteUserId, document.getElementById('white-name').textContent);
+  });
+  document.getElementById('black-player-card').addEventListener('click', () => {
+    if (blackUserId) showStatsModal(blackUserId, document.getElementById('black-name').textContent);
+  });
+
+  // --- Player Display Update ---
+  function updatePlayerDisplays(data) {
+    whiteUserId = data.whiteUserId;
+    blackUserId = data.blackUserId;
+
+    const white = data.whitePlayer || { firstName: 'White' };
+    document.getElementById('white-name').textContent = white.firstName || 'White';
+    const whiteAvatar = document.getElementById('white-avatar');
+    whiteAvatar.innerHTML = white.photoUrl ? `<img src="${white.photoUrl}" alt="W">` : (white.firstName?.charAt(0) || 'W');
+
+    const black = data.blackPlayer || { firstName: 'Black' };
+    document.getElementById('black-name').textContent = black.firstName || 'Black';
+    const blackAvatar = document.getElementById('black-avatar');
+    blackAvatar.innerHTML = black.photoUrl ? `<img src="${black.photoUrl}" alt="B">` : (black.firstName?.charAt(0) || 'B');
+
+    document.getElementById('spec-count').textContent = data.spectatorCount || 0;
+  }
+
+  function toggleWaitingOverlay(isWaiting) {
+    waitingOverlay.style.display = isWaiting ? 'flex' : 'none';
+  }
+
+  // Heartbeat
+  setInterval(() => {
+    if (gameId) {
+      fetch(`/api/game/${gameId}/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo })
+      }).catch(() => {});
+    }
+  }, 15000);
+
+  // --- Piece SVG (Improved Knight) ---
   function mkPiece(type, isWhite) {
     const f = isWhite ? '#ffffff' : '#1c1c1c';
     const f2 = isWhite ? '#ddd0b8' : '#333333';
@@ -142,28 +605,26 @@
       P: '<ellipse cx="22.5" cy="9.5" rx="5.2" ry="5.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<path d="M19.5 14.5 C17 17 16.5 19.5 17.5 21.5 L15 21.5 C13.5 22.5 13.5 24.5 15 25.5 L30 25.5 C31.5 24.5 31.5 22.5 30 21.5 L27.5 21.5 C28.5 19.5 28 17 25.5 14.5 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<rect x="11.5" y="25.5" width="22" height="4" rx="2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="9.5"  y="29.5" width="26" height="4.5" rx="2.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>',
-      R: '<rect x="9.5"  y="9.5"  width="5"   height="8"  rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="20"   y="9.5"  width="5"   height="8"  rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="30.5" y="9.5"  width="5"   height="8"  rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="11"   y="17"   width="23"  height="14" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="9.5"  y="30.5" width="26"  height="4.5" rx="2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="13"   y="23"   width="4"   height="5"  rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>'+
-         '<rect x="20.5" y="23"   width="4"   height="5"  rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>'+
-         '<rect x="28"   y="23"   width="4"   height="5"  rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>',
+         '<rect x="9.5" y="29.5" width="26" height="4.5" rx="2.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>',
+      R: '<rect x="9.5" y="9.5" width="5" height="8" rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<rect x="20" y="9.5" width="5" height="8" rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<rect x="30.5" y="9.5" width="5" height="8" rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<rect x="11" y="17" width="23" height="14" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<rect x="9.5" y="30.5" width="26" height="4.5" rx="2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<rect x="13" y="23" width="4" height="5" rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>'+
+         '<rect x="20.5" y="23" width="4" height="5" rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>'+
+         '<rect x="28" y="23" width="4" height="5" rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>',
       N: '<rect x="9.5" y="33" width="26" height="4.5" rx="2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<path d="M13 33 L13 22 C13 14 16 10 22.5 9 C26 8.5 29 10 30 13 C31.5 16 31 19 29 21 L32 21 L32 25 C32 30 28 33 22.5 33 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<path d="M16 20 L28 20 L28 24 C28 26 25 27 22.5 27 C20 27 16 26 16 24 Z" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.9"/>'+
-         '<line x1="18" y1="22" x2="27" y2="22" stroke="'+sk+'" stroke-width="1.1"/>'+
-         '<line x1="18" y1="24.5" x2="27" y2="24.5" stroke="'+sk+'" stroke-width="1.1"/>'+
-         '<path d="M22.5 9 C21 5 18 4 16 6 C18 6.5 19.5 8 20 10" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.9"/>',
+         '<path d="M22.5 5 C26 5 29 8 30 13 C31 18 29 22 26 25 L24 25 C22 23 21 20 21 17 C21 14 22 12 24 11 C21 10 18 12 17 15 C16 18 17 22 19 25 L17 25 C14 22 13 18 14 13 C15 8 18 5 22.5 5 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<path d="M20 8 C18 8 16 10 15 13 C14 16 15 19 17 21" fill="none" stroke="'+sk+'" stroke-width="1.2"/>'+
+         '<circle cx="26" cy="11" r="1.5" fill="'+f2+'"/>',
       B: '<circle cx="22.5" cy="7" r="3" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<path d="M22.5 10 C17.5 10 13.5 14.5 13.5 20.5 C13.5 24.5 15.5 27 19 28 L26 28 C29.5 27 31.5 24.5 31.5 20.5 C31.5 14.5 27.5 10 22.5 10 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<rect x="14" y="28" width="17" height="3" rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<rect x="9.5" y="30.5" width="26" height="4.5" rx="2.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<line x1="22.5" y1="9.5" x2="22.5" y2="5" stroke="'+sk+'" stroke-width="'+sw+'" stroke-linecap="round"/>'+
          '<ellipse cx="22.5" cy="19" rx="4" ry="5" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>',
-      Q: '<circle cx="9.5"  cy="13" r="3" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+      Q: '<circle cx="9.5" cy="13" r="3" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<circle cx="16.5" cy="10" r="3" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<circle cx="22.5" cy="8.5" r="3.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<circle cx="28.5" cy="10" r="3" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
@@ -171,31 +632,24 @@
          '<path d="M9 26 L9.5 16 L16.5 21 L22.5 11.5 L28.5 21 L35.5 16 L36 26 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<rect x="10" y="26" width="25" height="3.5" rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<rect x="9.5" y="29.5" width="26" height="4.5" rx="2.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>',
-      K: '<rect x="20" y="4.5"  width="5"  height="13" rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="15" y="8.5"  width="15" height="5"  rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+      K: '<rect x="20" y="4.5" width="5" height="13" rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<rect x="15" y="8.5" width="15" height="5" rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<path d="M13.5 28.5 C13.5 21 16 18 22.5 18 C29 18 31.5 21 31.5 28.5 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="11"  y="28.5" width="23" height="3"  rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<rect x="9.5" y="31"   width="26" height="4.5" rx="2.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'
+         '<rect x="11" y="28.5" width="23" height="3" rx="1" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         '<rect x="9.5" y="31" width="26" height="4.5" rx="2.2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'
     };
     return `<svg viewBox="0 0 45 45" xmlns="http://www.w3.org/2000/svg">${s[type] || ''}</svg>`;
   }
 
-  // Convert internal (White perspective) to display coordinates
+  // Coordinate helpers
   function internalToDisplay(row, col) {
-    if (myColor === 'black') {
-      return { row: 7 - row, col: 7 - col };
-    }
+    if (myColor === 'black') return { row: 7 - row, col: 7 - col };
     return { row, col };
   }
-
-  // Convert display coordinates to internal (White perspective)
   function displayToInternal(row, col) {
-    if (myColor === 'black') {
-      return { row: 7 - row, col: 7 - col };
-    }
+    if (myColor === 'black') return { row: 7 - row, col: 7 - col };
     return { row, col };
   }
-
   function fenToBoard(fen) {
     const board = Array(8).fill().map(() => Array(8).fill(''));
     const rows = fen.split(' ')[0].split('/');
@@ -208,157 +662,265 @@
     }
     return board;
   }
-
   function coordToAlgebraic(row, col) {
     const files = ['a','b','c','d','e','f','g','h'];
     const ranks = ['8','7','6','5','4','3','2','1'];
     return files[col] + ranks[row];
   }
 
-  // ---------- Move Generation (basic) ----------
-  function isWhitePiece(piece) {
-    return piece && piece === piece.toUpperCase() && piece !== piece.toLowerCase();
+  // --- Move generation with check validation, castling, and promotion detection ---
+  function isWhitePiece(p) { return p && p === p.toUpperCase() && p !== p.toLowerCase(); }
+  function isBlackPiece(p) { return p && p === p.toLowerCase() && p !== p.toUpperCase(); }
+  function getPieceColor(p) { if (!p) return null; return isWhitePiece(p) ? 'white' : 'black'; }
+
+  function isSquareAttacked(attackingColor, row, col) {
+    const pawnDir = attackingColor === 'white' ? 1 : -1;
+    for (let [dr, dc] of [[pawnDir, -1], [pawnDir, 1]]) {
+      const r = row + dr, c = col + dc;
+      if (r>=0 && r<8 && c>=0 && c<8 && boardState[r][c] && boardState[r][c].toUpperCase()==='P' && getPieceColor(boardState[r][c])===attackingColor) return true;
+    }
+    for (let [dr, dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) {
+      const r = row + dr, c = col + dc;
+      if (r>=0 && r<8 && c>=0 && c<8 && boardState[r][c] && boardState[r][c].toUpperCase()==='N' && getPieceColor(boardState[r][c])===attackingColor) return true;
+    }
+    for (let [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
+      let r = row+dr, c = col+dc;
+      while (r>=0 && r<8 && c>=0 && c<8) {
+        const p = boardState[r][c];
+        if (p) {
+          if (getPieceColor(p)===attackingColor && (p.toUpperCase()==='B'||p.toUpperCase()==='Q')) return true;
+          break;
+        }
+        r+=dr; c+=dc;
+      }
+    }
+    for (let [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      let r = row+dr, c = col+dc;
+      while (r>=0 && r<8 && c>=0 && c<8) {
+        const p = boardState[r][c];
+        if (p) {
+          if (getPieceColor(p)===attackingColor && (p.toUpperCase()==='R'||p.toUpperCase()==='Q')) return true;
+          break;
+        }
+        r+=dr; c+=dc;
+      }
+    }
+    for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) if(dr||dc) {
+      const r=row+dr, c=col+dc;
+      if (r>=0&&r<8&&c>=0&&c<8&&boardState[r][c]&&boardState[r][c].toUpperCase()==='K'&&getPieceColor(boardState[r][c])===attackingColor) return true;
+    }
+    return false;
   }
 
-  function isBlackPiece(piece) {
-    return piece && piece === piece.toLowerCase() && piece !== piece.toUpperCase();
+  function isMoveLegal(fromRow, fromCol, toRow, toCol, pieceColor) {
+    const boardCopy = boardState.map(r=>[...r]);
+    boardCopy[toRow][toCol] = boardCopy[fromRow][fromCol];
+    boardCopy[fromRow][fromCol] = '';
+    let kingRow=-1, kingCol=-1;
+    const kingChar = pieceColor==='white'?'K':'k';
+    for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(boardCopy[r][c]===kingChar) { kingRow=r; kingCol=c; break; }
+    if (kingRow===-1) return false;
+    const original = boardState;
+    boardState = boardCopy;
+    const attacked = isSquareAttacked(pieceColor==='white'?'black':'white', kingRow, kingCol);
+    boardState = original;
+    return !attacked;
   }
 
-  function getPieceColor(piece) {
-    if (!piece) return null;
-    return isWhitePiece(piece) ? 'white' : 'black';
-  }
-
-  // Generate all pseudo-legal moves for a piece at (row, col)
   function getMovesFromSquare(row, col) {
     const piece = boardState[row][col];
     if (!piece) return [];
     const pieceType = piece.toUpperCase();
     const pieceColor = getPieceColor(piece);
-    const moves = [];
+    const pseudo = [];
 
     function addMoveIfValid(toRow, toCol) {
-      if (toRow < 0 || toRow > 7 || toCol < 0 || toCol > 7) return false;
+      if (toRow<0||toRow>7||toCol<0||toCol>7) return false;
       const target = boardState[toRow][toCol];
       if (target) {
-        if (getPieceColor(target) === pieceColor) return false; // can't capture own
-        moves.push({ toRow, toCol, isCapture: true });
-        return false; // blocked by opponent piece
-      } else {
-        moves.push({ toRow, toCol, isCapture: false });
-        return true; // continue sliding
+        if (getPieceColor(target)===pieceColor) return false;
+        pseudo.push({ toRow, toCol, isCapture: true });
+        return false;
+      } else { pseudo.push({ toRow, toCol, isCapture: false }); return true; }
+    }
+
+    if (pieceType==='P') {
+      const dir = pieceColor==='white' ? -1 : 1;
+      const start = pieceColor==='white' ? 6 : 1;
+      const one = row+dir;
+      if (one>=0 && one<8 && !boardState[one][col]) {
+        pseudo.push({ toRow: one, toCol: col, isCapture: false });
+        if (row===start) { const two = row+2*dir; if (!boardState[two][col]) pseudo.push({ toRow: two, toCol: col, isCapture: false }); }
+      }
+      for (let dc of [-1,1]) {
+        const capRow=row+dir, capCol=col+dc;
+        if (capRow>=0&&capRow<8&&capCol>=0&&capCol<8) {
+          const t=boardState[capRow][capCol];
+          if (t && getPieceColor(t)!==pieceColor) pseudo.push({ toRow: capRow, toCol: capCol, isCapture: true });
+        }
+      }
+    } else if (pieceType==='N') {
+      for (let [dr,dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) {
+        const nr=row+dr, nc=col+dc;
+        if (nr>=0&&nr<8&&nc>=0&&nc<8) {
+          const t=boardState[nr][nc];
+          if (!t) pseudo.push({ toRow: nr, toCol: nc, isCapture: false });
+          else if (getPieceColor(t)!==pieceColor) pseudo.push({ toRow: nr, toCol: nc, isCapture: true });
+        }
+      }
+    } else if (pieceType==='B'||pieceType==='R'||pieceType==='Q') {
+      const dirs = [];
+      if (pieceType!=='R') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+      if (pieceType!=='B') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+      for (let [dr,dc] of dirs) {
+        let r=row+dr, c=col+dc;
+        while (r>=0&&r<8&&c>=0&&c<8) {
+          const t=boardState[r][c];
+          if (!t) { pseudo.push({ toRow: r, toCol: c, isCapture: false }); r+=dr; c+=dc; }
+          else { if (getPieceColor(t)!==pieceColor) pseudo.push({ toRow: r, toCol: c, isCapture: true }); break; }
+        }
+      }
+    } else if (pieceType==='K') {
+      // Normal moves
+      for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) if(dr||dc) {
+        const nr=row+dr, nc=col+dc;
+        if (nr>=0&&nr<8&&nc>=0&&nc<8) {
+          const t=boardState[nr][nc];
+          if (!t) pseudo.push({ toRow: nr, toCol: nc, isCapture: false });
+          else if (getPieceColor(t)!==pieceColor) pseudo.push({ toRow: nr, toCol: nc, isCapture: true });
+        }
+      }
+      // Castling
+      const backRank = pieceColor === 'white' ? 7 : 0;
+      if (row === backRank && col === 4) {
+        // Kingside
+        if (!isSquareAttacked(pieceColor==='white'?'black':'white', row, col) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 5) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 6) &&
+            !boardState[row][5] && !boardState[row][6] &&
+            boardState[row][7] && boardState[row][7].toUpperCase() === 'R' &&
+            getPieceColor(boardState[row][7]) === pieceColor) {
+          pseudo.push({ toRow: row, toCol: 6, isCapture: false, isCastling: true });
+        }
+        // Queenside
+        if (!isSquareAttacked(pieceColor==='white'?'black':'white', row, col) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 3) &&
+            !isSquareAttacked(pieceColor==='white'?'black':'white', row, 2) &&
+            !boardState[row][3] && !boardState[row][2] && !boardState[row][1] &&
+            boardState[row][0] && boardState[row][0].toUpperCase() === 'R' &&
+            getPieceColor(boardState[row][0]) === pieceColor) {
+          pseudo.push({ toRow: row, toCol: 2, isCapture: false, isCastling: true });
+        }
       }
     }
 
-    // Pawn
-    if (pieceType === 'P') {
-      const direction = pieceColor === 'white' ? -1 : 1;
-      const startRow = pieceColor === 'white' ? 6 : 1;
-      // forward 1
-      const oneStepRow = row + direction;
-      if (oneStepRow >= 0 && oneStepRow < 8 && !boardState[oneStepRow][col]) {
-        moves.push({ toRow: oneStepRow, toCol: col, isCapture: false });
-        // forward 2 from start
-        if (row === startRow) {
-          const twoStepRow = row + 2 * direction;
-          if (!boardState[twoStepRow][col]) {
-            moves.push({ toRow: twoStepRow, toCol: col, isCapture: false });
-          }
-        }
-      }
-      // captures
-      for (let dc of [-1, 1]) {
-        const capRow = row + direction;
-        const capCol = col + dc;
-        if (capRow >= 0 && capRow < 8 && capCol >= 0 && capCol < 8) {
-          const target = boardState[capRow][capCol];
-          if (target && getPieceColor(target) !== pieceColor) {
-            moves.push({ toRow: capRow, toCol: capCol, isCapture: true });
-          }
-        }
-      }
-      // en passant skipped (backend validates)
-    }
-    // Knight
-    else if (pieceType === 'N') {
-      const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
-      for (let [dr, dc] of knightMoves) {
-        const nr = row + dr, nc = col + dc;
-        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
-          const target = boardState[nr][nc];
-          if (!target) moves.push({ toRow: nr, toCol: nc, isCapture: false });
-          else if (getPieceColor(target) !== pieceColor) moves.push({ toRow: nr, toCol: nc, isCapture: true });
-        }
-      }
-    }
-    // Bishop, Rook, Queen
-    else if (pieceType === 'B' || pieceType === 'R' || pieceType === 'Q') {
-      const directions = [];
-      if (pieceType === 'B' || pieceType === 'Q') {
-        directions.push([-1,-1], [-1,1], [1,-1], [1,1]);
-      }
-      if (pieceType === 'R' || pieceType === 'Q') {
-        directions.push([-1,0], [1,0], [0,-1], [0,1]);
-      }
-      for (let [dr, dc] of directions) {
-        let r = row + dr, c = col + dc;
-        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
-          const target = boardState[r][c];
-          if (!target) {
-            moves.push({ toRow: r, toCol: c, isCapture: false });
-            r += dr; c += dc;
-          } else {
-            if (getPieceColor(target) !== pieceColor) {
-              moves.push({ toRow: r, toCol: c, isCapture: true });
-            }
-            break;
-          }
-        }
-      }
-    }
-    // King
-    else if (pieceType === 'K') {
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const nr = row + dr, nc = col + dc;
-          if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
-            const target = boardState[nr][nc];
-            if (!target) moves.push({ toRow: nr, toCol: nc, isCapture: false });
-            else if (getPieceColor(target) !== pieceColor) moves.push({ toRow: nr, toCol: nc, isCapture: true });
-          }
-        }
-      }
-      // castling skipped (backend validates)
-    }
-    return moves;
+    return pseudo.filter(m => isMoveLegal(row, col, m.toRow, m.toCol, pieceColor));
   }
 
-  // ---------- Game logic ----------
+  // --- Clock display ---
+  function formatTime(s) { 
+    if (s < 0) s = 0;
+    const mins = Math.floor(s / 60);
+    const secs = Math.floor(s % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+
+  function updateClockDisplay() {
+    document.getElementById('white-clock').textContent = formatTime(whiteTime);
+    document.getElementById('black-clock').textContent = formatTime(blackTime);
+    const wc = document.getElementById('white-clock'), bc = document.getElementById('black-clock');
+    wc.classList.toggle('active', currentTurn === 'w' && !gameOver && !waitingForOpponent);
+    bc.classList.toggle('active', currentTurn === 'b' && !gameOver && !waitingForOpponent);
+    wc.classList.toggle('low-time', whiteTime < 30);
+    bc.classList.toggle('low-time', blackTime < 30);
+  }
+
+  function startLocalTimer() {
+    if (localTimerInterval) clearInterval(localTimerInterval);
+    console.log('⏱️ Local timer started. whiteTime:', whiteTime, 'blackTime:', blackTime);
+    localTimerInterval = setInterval(() => {
+      if (gameOver || waitingForOpponent) return;
+      if (currentTurn === 'w') {
+        whiteTime = Math.max(0, whiteTime - 0.1);
+        if (whiteTime <= 0) {
+          gameOver = true;
+          clearInterval(localTimerInterval);
+          document.getElementById('status').textContent = 'BLACK WINS ON TIME!';
+          document.getElementById('status').className = 'checkmate';
+        }
+      } else if (currentTurn === 'b') {
+        blackTime = Math.max(0, blackTime - 0.1);
+        if (blackTime <= 0) {
+          gameOver = true;
+          clearInterval(localTimerInterval);
+          document.getElementById('status').textContent = 'WHITE WINS ON TIME!';
+          document.getElementById('status').className = 'checkmate';
+        }
+      }
+      updateClockDisplay();
+    }, 100);
+  }
+
+  function syncTimeFromServer(data) {
+    if (data.whiteTime !== undefined) whiteTime = data.whiteTime;
+    if (data.blackTime !== undefined) blackTime = data.blackTime;
+    updateClockDisplay();
+  }
+
+  // --- Promotion handling ---
+  function showPromotionModal(from, to) {
+    return new Promise((resolve) => {
+      pendingPromotion = { from, to };
+      promotionResolve = resolve;
+      document.getElementById('promotion-modal').style.display = 'flex';
+    });
+  }
+
+  window.cancelPromotion = function() {
+    document.getElementById('promotion-modal').style.display = 'none';
+    if (promotionResolve) {
+      promotionResolve('q');
+      promotionResolve = null;
+    }
+    pendingPromotion = null;
+  };
+
+  document.querySelectorAll('.promo-piece').forEach(el => {
+    el.addEventListener('click', () => {
+      const piece = el.dataset.piece;
+      document.getElementById('promotion-modal').style.display = 'none';
+      if (promotionResolve) {
+        promotionResolve(piece);
+        promotionResolve = null;
+      }
+    });
+  });
+
+  // --- API & Game Flow ---
   async function joinGame() {
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ userId, userInfo })
       });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(errorText || `HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      myColor = data.color;
-      waitingForOpponent = data.waitingForOpponent;
-      document.getElementById('player-color').innerHTML = `You are: ${myColor.toUpperCase()}`;
+      if (data.color) myColor = data.color;
+      waitingForOpponent = data.waitingForOpponent || data.waitingForAssignment;
       boardState = fenToBoard(data.fen);
       currentTurn = data.turn;
+      gameOver = data.isGameOver || false;
+      syncTimeFromServer(data);
+      updatePlayerDisplays(data);
+      toggleWaitingOverlay(waitingForOpponent);
       renderBoard();
       updateStatus(data);
+      startLocalTimer();
       startPolling();
     } catch (err) {
-      console.error('Join error:', err);
-      document.getElementById('status').textContent = 'Failed to join game. It may be full or invalid.';
-      document.getElementById('board').innerHTML = `<div class="error">Error: ${err.message}</div>`;
+      document.getElementById('status').textContent = 'Failed to join.';
+      boardEl.innerHTML = `<div class="error">${err.message}</div>`;
     }
   }
 
@@ -367,217 +929,309 @@
       const res = await fetch(`/api/game/${gameId}/state`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      waitingForOpponent = data.waitingForOpponent;
+      
+      if (!myColor) {
+        if (data.whiteUserId === userId) myColor = 'white';
+        else if (data.blackUserId === userId) myColor = 'black';
+        else if (!data.waitingForAssignment && data.whiteUserId && data.blackUserId) myColor = 'spectator';
+      }
+      
+      const wasWaiting = waitingForOpponent;
+      waitingForOpponent = data.waitingForOpponent || data.waitingForAssignment;
       currentTurn = data.turn;
+      gameOver = data.isGameOver || false;
+      syncTimeFromServer(data);
+      updatePlayerDisplays(data);
       const newBoard = fenToBoard(data.fen);
       if (JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
         boardState = newBoard;
         lastMove = data.lastMove;
-        // Clear selection if board changed (e.g., opponent moved)
-        selectedSquare = null;
-        possibleMoves = [];
+        selectedSquare = null; possibleMoves = [];
         renderBoard();
       }
       updateStatus(data);
+      if (wasWaiting !== waitingForOpponent) {
+        toggleWaitingOverlay(waitingForOpponent);
+        if (!waitingForOpponent) renderBoard();
+      }
+      if (gameOver) {
+        clearInterval(localTimerInterval);
+        clearInterval(updateInterval);
+      }
     } catch (err) {}
   }
 
-  async function makeMove(fromInternal, toInternal) {
-    if (waitingForOpponent) {
-      document.getElementById('status').textContent = 'Waiting for opponent to join...';
-      return;
-    }
-    const from = coordToAlgebraic(fromInternal.row, fromInternal.col);
-    const to = coordToAlgebraic(toInternal.row, toInternal.col);
+  async function makeMove(fromInt, toInt, promotionPiece = 'q') {
+    if (waitingForOpponent || gameOver) return;
+    const from = coordToAlgebraic(fromInt.row, fromInt.col);
+    const to = coordToAlgebraic(toInt.row, toInt.col);
     try {
       const res = await fetch(`/api/game/${gameId}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, from, to, promotion: 'q' })
+        body: JSON.stringify({ userId, from, to, promotion: promotionPiece })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         boardState = fenToBoard(data.fen);
         lastMove = { from, to };
         currentTurn = data.turn;
-        selectedSquare = null;
-        possibleMoves = [];
+        gameOver = data.isGameOver || false;
+        syncTimeFromServer(data);
+        updatePlayerDisplays(data);
+        selectedSquare = null; possibleMoves = [];
         renderBoard();
         updateStatus(data);
         tg.HapticFeedback.impactOccurred('light');
+        if (gameOver) clearInterval(localTimerInterval);
       } else {
-        document.getElementById('status').textContent = `Invalid: ${data.error || 'move'}`;
-        setTimeout(() => fetchGameState(), 1000);
-        selectedSquare = null;
-        possibleMoves = [];
+        document.getElementById('status').textContent = `Invalid: ${data.error||'move'}`;
+        setTimeout(fetchGameState, 1000);
+        selectedSquare = null; possibleMoves = [];
         renderBoard();
         tg.HapticFeedback.notificationOccurred('error');
       }
+    } catch (err) { console.error(err); }
+  }
+
+  async function resignGame() {
+    if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
+    if (!confirm('Are you sure you want to resign?')) return;
+    try {
+      const res = await fetch(`/api/game/${gameId}/resign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        gameOver = true;
+        updateStatus(data);
+        updatePlayerDisplays(data);
+        renderBoard();
+        clearInterval(localTimerInterval);
+      }
+    } catch (err) { console.error(err); }
+  }
+
+  async function newGame() {
+    try {
+      const res = await fetch('/api/game/new', { method: 'POST' });
+      const data = await res.json();
+      window.location.href = `/?game=${data.gameId}`;
     } catch (err) {
-      console.error(err);
+      alert('Could not create new game.');
     }
   }
 
   function updateStatus(data) {
-    const statusDiv = document.getElementById('status');
-    const infoDiv = document.getElementById('info');
+    const s = document.getElementById('status'), info = document.getElementById('info');
     if (data.isGameOver) {
-      if (data.winner) statusDiv.textContent = `${data.winner.toUpperCase()} WINS!`;
-      else if (data.isStalemate) statusDiv.textContent = 'STALEMATE';
-      else statusDiv.textContent = 'GAME OVER';
-      statusDiv.className = 'checkmate';
-      if (updateInterval) clearInterval(updateInterval);
-      infoDiv.textContent = 'Game finished';
+      if (data.winner) s.textContent = `${data.winner.toUpperCase()} WINS!`;
+      else s.textContent = 'GAME OVER';
+      s.className = 'checkmate';
+      info.textContent = 'Game finished';
       return;
     }
-    if (waitingForOpponent) {
-      statusDiv.textContent = '⏳ WAITING FOR OPPONENT...';
-      statusDiv.className = '';
-      infoDiv.textContent = 'Share the game with a friend!';
+    if (data.waitingForAssignment || waitingForOpponent) {
+      s.textContent = '⏳ WAITING FOR OPPONENT...';
+      s.className = '';
+      info.textContent = 'Share the game with a friend!';
       return;
     }
     if (data.inCheck) {
-      statusDiv.textContent = `${data.turn === 'w' ? 'WHITE' : 'BLACK'} IN CHECK!`;
-      statusDiv.className = 'check';
+      s.textContent = `${data.turn==='w'?'WHITE':'BLACK'} IN CHECK!`;
+      s.className = 'check';
     } else {
-      statusDiv.textContent = `${data.turn === 'w' ? 'WHITE' : 'BLACK'}'S TURN`;
-      statusDiv.className = '';
+      s.textContent = `${data.turn==='w'?'WHITE':'BLACK'}'S TURN`;
+      s.className = '';
     }
-    const myTurn = (myColor === 'white' && data.turn === 'w') || (myColor === 'black' && data.turn === 'b');
-    if (myTurn && !data.isGameOver) {
-      infoDiv.textContent = 'YOUR TURN';
-      infoDiv.style.color = '#64b050';
-    } else if (!data.isGameOver) {
-      infoDiv.textContent = "OPPONENT'S TURN";
-      infoDiv.style.color = '#c9a84c';
-    }
+    const myTurn = (myColor==='white' && data.turn==='w') || (myColor==='black' && data.turn==='b');
+    info.textContent = myTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
+    info.style.color = myTurn ? '#64b050' : '#c9a84c';
   }
 
-  // Render board from White perspective, flipped for Black player
   function renderBoard() {
-    const boardEl = document.getElementById('board');
     boardEl.innerHTML = '';
     if (!boardState) return;
-
-    for (let displayRow = 0; displayRow < 8; displayRow++) {
-      for (let displayCol = 0; displayCol < 8; displayCol++) {
-        const internal = displayToInternal(displayRow, displayCol);
-        const piece = boardState[internal.row][internal.col];
-        const cell = document.createElement('div');
-        cell.className = `cell ${((displayRow + displayCol) % 2 === 0) ? 'light' : 'dark'}`;
-
-        // Highlight last move
-        if (lastMove) {
-          const lastFromInternal = {
-            row: 8 - parseInt(lastMove.from[1]),
-            col: lastMove.from.charCodeAt(0) - 97
-          };
-          const lastToInternal = {
-            row: 8 - parseInt(lastMove.to[1]),
-            col: lastMove.to.charCodeAt(0) - 97
-          };
-          const lastFromDisplay = internalToDisplay(lastFromInternal.row, lastFromInternal.col);
-          const lastToDisplay = internalToDisplay(lastToInternal.row, lastToInternal.col);
-          if ((displayRow === lastFromDisplay.row && displayCol === lastFromDisplay.col) ||
-              (displayRow === lastToDisplay.row && displayCol === lastToDisplay.col)) {
-            cell.classList.add('last-move-hi');
-          }
-        }
-
-        // Highlight selected square
-        if (selectedSquare) {
-          const selectedDisplay = internalToDisplay(selectedSquare.row, selectedSquare.col);
-          if (displayRow === selectedDisplay.row && displayCol === selectedDisplay.col) {
-            cell.classList.add('selected');
-          }
-        }
-
-        // Highlight possible moves
-        const move = possibleMoves.find(m => m.toRow === internal.row && m.toCol === internal.col);
-        if (move) {
-          if (move.isCapture) {
-            cell.classList.add('capture-highlight');
-          } else {
-            cell.classList.add('move-dot');
-          }
-        }
-
-        if (piece) {
-          const isWhite = piece === piece.toUpperCase() && piece !== piece.toLowerCase();
-          cell.innerHTML = mkPiece(piece.toUpperCase(), isWhite);
-        }
-
-        cell.onclick = (() => {
-          const intCoord = internal;
-          return () => onCellClick(intCoord.row, intCoord.col);
-        })();
-
-        boardEl.appendChild(cell);
+    for (let dr=0; dr<8; dr++) for (let dc=0; dc<8; dc++) {
+      const int = displayToInternal(dr, dc);
+      const piece = boardState[int.row][int.col];
+      const cell = document.createElement('div');
+      cell.className = `cell ${((dr+dc)%2===0)?'light':'dark'}`;
+      if (lastMove) {
+        const lf = { row: 8-parseInt(lastMove.from[1]), col: lastMove.from.charCodeAt(0)-97 };
+        const lt = { row: 8-parseInt(lastMove.to[1]), col: lastMove.to.charCodeAt(0)-97 };
+        const lfd = internalToDisplay(lf.row, lf.col), ltd = internalToDisplay(lt.row, lt.col);
+        if ((dr===lfd.row&&dc===lfd.col)||(dr===ltd.row&&dc===ltd.col)) cell.classList.add('last-move-hi');
       }
+      if (selectedSquare) {
+        const sd = internalToDisplay(selectedSquare.row, selectedSquare.col);
+        if (dr===sd.row && dc===sd.col) cell.classList.add('selected');
+      }
+      const move = possibleMoves.find(m => m.toRow===int.row && m.toCol===int.col);
+      if (move) cell.classList.add(move.isCapture ? 'capture-highlight' : 'move-dot');
+      if (piece) cell.innerHTML = mkPiece(piece.toUpperCase(), piece===piece.toUpperCase());
+      cell.onclick = (() => { const i=int; return ()=>onCellClick(i.row,i.col); })();
+      boardEl.appendChild(cell);
     }
   }
 
-  function onCellClick(internalRow, internalCol) {
-    if (!myColor || myColor === 'spectator') return;
-    if (waitingForOpponent) {
-      document.getElementById('status').textContent = 'Waiting for opponent...';
-      return;
-    }
-
-    const myTurn = (myColor === 'white' && currentTurn === 'w') || (myColor === 'black' && currentTurn === 'b');
+  async function onCellClick(row, col) {
+    if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
+    const myTurn = (myColor==='white' && currentTurn==='w') || (myColor==='black' && currentTurn==='b');
     if (!myTurn) {
       tg.HapticFeedback.notificationOccurred('warning');
       document.getElementById('status').textContent = "Not your turn";
       return;
     }
-
-    const piece = boardState[internalRow][internalCol];
-
-    // If a square is selected
-    if (selectedSquare !== null) {
-      // Check if clicked square is a valid move
-      const move = possibleMoves.find(m => m.toRow === internalRow && m.toCol === internalCol);
+    const piece = boardState[row][col];
+    if (selectedSquare) {
+      const move = possibleMoves.find(m => m.toRow===row && m.toCol===col);
       if (move) {
-        makeMove(selectedSquare, { row: internalRow, col: internalCol });
+        const pieceMoved = boardState[selectedSquare.row][selectedSquare.col];
+        const isPawn = pieceMoved && pieceMoved.toUpperCase() === 'P';
+        const promotionRank = (myColor === 'white' && row === 0) || (myColor === 'black' && row === 7);
+        let promo = 'q';
+        if (isPawn && promotionRank) {
+          promo = await showPromotionModal(selectedSquare, {row, col});
+        }
+        await makeMove(selectedSquare, {row, col}, promo);
         return;
       } else {
-        // Clicked elsewhere: deselect
-        selectedSquare = null;
-        possibleMoves = [];
+        selectedSquare = null; possibleMoves = [];
         renderBoard();
-        // If clicked on own piece, select it (handled below)
         if (piece) {
-          const pieceColor = getPieceColor(piece);
-          if ((myColor === 'white' && pieceColor === 'white') || (myColor === 'black' && pieceColor === 'black')) {
-            selectedSquare = { row: internalRow, col: internalCol };
-            possibleMoves = getMovesFromSquare(internalRow, internalCol);
+          const c = getPieceColor(piece);
+          if ((myColor==='white'&&c==='white')||(myColor==='black'&&c==='black')) {
+            selectedSquare = {row, col};
+            possibleMoves = getMovesFromSquare(row, col);
             renderBoard();
             tg.HapticFeedback.selectionChanged();
           }
         }
       }
     } else {
-      // No selection: try to select a piece
       if (piece) {
-        const pieceColor = getPieceColor(piece);
-        if ((myColor === 'white' && pieceColor === 'white') || (myColor === 'black' && pieceColor === 'black')) {
-          selectedSquare = { row: internalRow, col: internalCol };
-          possibleMoves = getMovesFromSquare(internalRow, internalCol);
+        const c = getPieceColor(piece);
+        if ((myColor==='white'&&c==='white')||(myColor==='black'&&c==='black')) {
+          selectedSquare = {row, col};
+          possibleMoves = getMovesFromSquare(row, col);
           renderBoard();
           tg.HapticFeedback.selectionChanged();
-        } else {
-          tg.HapticFeedback.notificationOccurred('error');
         }
       }
     }
   }
 
-  function startPolling() {
-    if (updateInterval) clearInterval(updateInterval);
+  function startPolling() { 
+    if(updateInterval) clearInterval(updateInterval); 
     updateInterval = setInterval(fetchGameState, 1000);
+    startChatPolling();
   }
 
-  joinGame();
+  // ---------- CHAT JAVASCRIPT ----------
+  let lastChatTimestamp = 0;
+  let chatInterval = null;
+  let unreadCount = 0;
+  let chatOpen = false;
+
+  function toggleChat() {
+    chatOpen = !chatOpen;
+    document.getElementById('chat-panel').classList.toggle('open', chatOpen);
+    if (chatOpen) {
+      unreadCount = 0;
+      updateBadge();
+      setTimeout(() => {
+        const box = document.getElementById('chat-messages');
+        box.scrollTop = box.scrollHeight;
+        document.getElementById('chat-input').focus();
+      }, 50);
+    }
+    tg.HapticFeedback?.selectionChanged();
+  }
+
+  function updateBadge() {
+    const badge = document.getElementById('chat-badge');
+    if (unreadCount > 0 && !chatOpen) {
+      badge.style.display = 'flex';
+      badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  function appendChatMessage(msg) {
+    const box = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = `chat-msg ${msg.color || 'spectator'}`;
+    div.innerHTML = `<span class="msg-name">${escapeHtml(msg.name)}:</span>`
+                  + `<span class="msg-text">${escapeHtml(msg.text)}</span>`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    try {
+      const res = await fetch(`/api/game/${gameId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, text })
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.message) {
+        appendChatMessage(data.message);
+        lastChatTimestamp = data.message.timestamp;
+        tg.HapticFeedback?.impactOccurred('light');
+      }
+    } catch (err) { console.error('Chat send error:', err); }
+  }
+
+  async function pollChat() {
+    try {
+      const res = await fetch(`/api/game/${gameId}/chat?since=${lastChatTimestamp}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const msg of data.messages) {
+        if (msg.userId !== userId) {
+          appendChatMessage(msg);
+          if (!chatOpen) { unreadCount++; updateBadge(); }
+          tg.HapticFeedback?.impactOccurred('light');
+        }
+        lastChatTimestamp = Math.max(lastChatTimestamp, msg.timestamp);
+      }
+    } catch (err) {}
+  }
+
+  document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); }
+  });
+
+  function startChatPolling() {
+    if (chatInterval) clearInterval(chatInterval);
+    chatInterval = setInterval(pollChat, 1500);
+  }
+
+  window.toggleChat = toggleChat;
+  window.sendChatMessage = sendChatMessage;
+
+  // Start the app
+  (async () => {
+    await ensureGameId();
+    joinGame();
+  })();
+
+  window.resignGame = resignGame;
+  window.newGame = newGame;
 </script>
 </body>
 </html>
