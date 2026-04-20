@@ -156,6 +156,102 @@ function getGameUrl(gameId) {
   return `${BASE_URL}/?game=${gameId}`;
 }
 
+// ========== BOT MESSAGE HELPERS ==========
+function escMd(str) {
+  // Escape all MarkdownV2 special characters
+  return String(str).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
+}
+
+function buildGameMessage(game, gameId, timeLabel) {
+  const miniAppLink = getMiniAppLink(gameId);
+  const hasWhite = !!(game.whiteUserId);
+  const hasBlack = !!(game.blackUserId);
+  const whiteName = escMd(game.whitePlayerInfo?.firstName || 'Player 1');
+  const blackName = escMd(game.blackPlayerInfo?.firstName || 'Player 2');
+  const timeLabelE = escMd(timeLabel);
+  const gameIdE = escMd(gameId);
+
+  let statusLines = '';
+  let buttonText = '♟️ Play Chess';
+
+  if (game.gameOverByTime || (game.chess && chessCompat(game.chess).isGameOver()) || game.isDraw) {
+    const c = chessCompat(game.chess);
+    let resultLine = '';
+    if (game.isDraw) {
+      resultLine = '🤝 *Result: Draw by agreement*';
+    } else {
+      const turn = c.turn();
+      const checkmate = c.isCheckmate();
+      const timeout = game.whiteTime <= 0 || game.blackTime <= 0;
+      if (checkmate) {
+        const winner = turn === 'w' ? blackName : whiteName;
+        resultLine = `🏆 *${winner} wins by checkmate\\!*`;
+      } else if (timeout) {
+        const winner = game.whiteTime <= 0 ? blackName : whiteName;
+        resultLine = `⏰ *${winner} wins on time\\!*`;
+      } else {
+        resultLine = '🏁 *Game over*';
+      }
+    }
+    statusLines = `\n⚪ ${whiteName}  vs  ⚫ ${blackName}\n\n${resultLine}`;
+    buttonText = '👁️ View Game';
+  } else if (hasWhite && hasBlack) {
+    statusLines = `\n⚪ ${whiteName}  ⚔️  ⚫ ${blackName}\n\n🟢 *Match in progress\\.\\.\\.*`;
+    buttonText = '♟️ Spectate';
+  } else if (hasWhite || hasBlack) {
+    const joinedName = hasWhite ? whiteName : blackName;
+    const joinedIcon = hasWhite ? '⚪' : '⚫';
+    statusLines = `\n${joinedIcon} *${joinedName} joined* — waiting for opponent\\.\\.\\.`;
+    buttonText = '♟️ Join & Play';
+  } else {
+    statusLines = '\n⚔️ First two to join play\n🎲 Colors assigned randomly';
+    buttonText = '♟️ Play Chess';
+  }
+
+  const text = `🎮 *Chess · ${timeLabelE}*\n\nGame ID: \`${gameIdE}\`\n${statusLines}\n⏱️ Time: ${timeLabelE} each\n\nTap below to play\\!`;
+  const keyboard = miniAppLink ? [[{ text: buttonText, url: miniAppLink }]] : [];
+  return { text, keyboard };
+}
+
+async function editBotMessage(game, gameId, timeLabel) {
+  if (!BOT_TOKEN) return;
+  try {
+    const { text, keyboard } = buildGameMessage(game, gameId, timeLabel);
+    const reply_markup = JSON.stringify({ inline_keyboard: keyboard });
+
+    if (game.inlineMessageId) {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inline_message_id: game.inlineMessageId,
+          text,
+          parse_mode: 'MarkdownV2',
+          reply_markup
+        })
+      });
+    } else if (game.chatId && game.botMessageId) {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: game.chatId,
+          message_id: game.botMessageId,
+          text,
+          parse_mode: 'MarkdownV2',
+          reply_markup
+        })
+      });
+    }
+  } catch (err) {
+    console.error('editBotMessage error:', err.message);
+  }
+}
+
+function getTimeLabel(initialTimeSec) {
+  return initialTimeSec <= 300 ? '5 min' : '10 min';
+}
+
 // ========== TIME CONTROL CONSTANTS ==========
 const DEFAULT_TIME_SEC = 10 * 60;      // 10 minutes
 const TIME_5_MIN = 5 * 60;             // 5 minutes
@@ -185,6 +281,9 @@ function createNewGame(initialTimeSec = DEFAULT_TIME_SEC) {
     blackPlayerInfo: null,
     statsRecorded: false,
     drawOffer: null,          // null | 'white' | 'black'  (who offered)
+    inlineMessageId: null,    // Telegram inline_message_id for live edits
+    chatId: null,             // for /newgame command messages
+    botMessageId: null,       // for /newgame command messages
   });
   activeViewers.set(gameId, new Map());
   chatMessages.set(gameId, []);
@@ -400,9 +499,15 @@ app.post('/api/game/:gameId/join', (req, res) => {
     game.pendingPlayers = [];
     game.lastMoveTimestamp = Date.now();
 
+    // Both joined — update Telegram message to show VS
+    editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
+
     const color = game.assignedPlayers.get(userId);
     return res.json({ color, ...buildStateResponse(game, gameId) });
   }
+
+  // One player joined — update the Telegram message
+  editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
 
   res.json({
     color: null,
@@ -472,6 +577,7 @@ app.post('/api/game/:gameId/move', async (req, res) => {
     
     if (c.isGameOver()) {
       await recordGameResult(game);
+      editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
     }
     
     res.json(response);
@@ -505,6 +611,7 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
   const winner = playerColor === 'white' ? 'black' : 'white';
   
   await recordGameResult(game, winner);
+  editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
   
   res.json({
     success: true,
@@ -556,6 +663,7 @@ app.post('/api/game/:gameId/draw-accept', async (req, res) => {
 
   await recordGameResult(game);  // records as draw
 
+  editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
   res.json({ success: true, isDraw: true, winner: null, ...buildStateResponse(game, gameId) });
 });
 
@@ -702,6 +810,19 @@ bot.on('inline_query', async (ctx) => {
   ], { cache_time: 0 });
 });
 
+// NOTE: For chosen_inline_result to fire, enable inline feedback in BotFather:
+// /setinlinefeedback → select your bot → enable (100%)
+// Without this, inlineMessageId will never be saved.
+// When user picks an inline result, Telegram fires chosen_inline_result with inline_message_id
+bot.on('chosen_inline_result', (ctx) => {
+  const { result_id, inline_message_id } = ctx.chosenInlineResult;
+  const game = games.get(result_id);
+  if (game && inline_message_id) {
+    game.inlineMessageId = inline_message_id;
+    console.log(`📌 Saved inlineMessageId for game ${result_id}: ${inline_message_id}`);
+  }
+});
+
 bot.command('newgame', async (ctx) => {
   try {
     const messageText = ctx.message.text;
@@ -722,7 +843,7 @@ bot.command('newgame', async (ctx) => {
     const messageTextOut = `🎮 *New Chess Game · ${timeLabel}*\n\nGame ID: \`${gameId}\`\n\n⚔️ First two to join play\n🎲 Colors assigned randomly\n⏱️ Time: ${timeLabel} each`;
 
     if (isGroup) {
-      await ctx.reply(messageTextOut, {
+      const sentMsg = await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
@@ -730,8 +851,13 @@ bot.command('newgame', async (ctx) => {
           ]
         }
       });
+      const game = games.get(gameId);
+      if (game && sentMsg) {
+        game.chatId = sentMsg.chat.id;
+        game.botMessageId = sentMsg.message_id;
+      }
     } else {
-      await ctx.reply(messageTextOut, {
+      const sentMsg = await ctx.reply(messageTextOut, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
@@ -740,6 +866,11 @@ bot.command('newgame', async (ctx) => {
           ]
         }
       });
+      const game = games.get(gameId);
+      if (game && sentMsg) {
+        game.chatId = sentMsg.chat.id;
+        game.botMessageId = sentMsg.message_id;
+      }
     }
   } catch (err) {
     console.error('newgame error:', err);
