@@ -414,11 +414,6 @@
       grid-template-columns: repeat(8, 12.5%);
       width: 100%;
       aspect-ratio: 1;
-      background: #2a1e0f;
-      color: rgba(201,168,76,0.5);
-      font-family: Georgia, serif;
-      font-size: 0.8rem;
-      letter-spacing: 3px;
     }
     .cell {
       aspect-ratio: 1;
@@ -875,7 +870,7 @@
 <div id="status" style="display:none"></div>
 
 <div id="board-wrap">
-  <div id="board">Loading game...</div>
+  <div id="board" class="loading">Loading game...</div>
   <div id="waiting-overlay" style="display: none;">
     <div class="waiting-message">⏳ WAITING FOR OPPONENT...</div>
   </div>
@@ -1517,9 +1512,8 @@
 
   // --- API & Game Flow ---
   async function joinGame() {
-    // Clear any stale "Loading game..." text and classes immediately
+    // Clear any stale "Loading game..." text immediately
     boardEl.innerHTML = '';
-    boardEl.className = '';
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
         method: 'POST',
@@ -1760,7 +1754,6 @@ This cannot be undone.',
 
   function renderBoard() {
     boardEl.innerHTML = '';
-    boardEl.className = ''; // clear any stale classes like "loading"
     if (!boardState) return;
     for (let dr=0; dr<8; dr++) for (let dc=0; dc<8; dc++) {
       const int = displayToInternal(dr, dc);
