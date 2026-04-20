@@ -188,9 +188,9 @@
       margin-bottom: 8px;
       border-radius: 10px;
       overflow: hidden;
-      background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(201,168,76,0.18);
-      min-height: 38px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.1);
+      min-height: 42px;
       display: flex;
       align-items: stretch;
     }
@@ -206,9 +206,10 @@
       text-transform: uppercase;
       font-family: Georgia, serif;
       white-space: nowrap;
-      border-right: 1px solid rgba(201,168,76,0.15);
-      background: rgba(0,0,0,0.25);
-      min-width: 68px;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.3);
+      min-width: 72px;
+      color: #f0d080;
       transition: background 0.3s, color 0.3s;
     }
 
@@ -219,19 +220,20 @@
       flex-direction: column;
       justify-content: center;
       padding: 5px 12px;
-      gap: 1px;
+      gap: 2px;
     }
     #status-line1 {
-      font-size: 0.72rem;
-      letter-spacing: 2.5px;
+      font-size: 0.78rem;
+      letter-spacing: 2px;
       font-family: Georgia, serif;
-      color: #c9a84c;
+      font-weight: bold;
+      color: #f5e070;
       transition: color 0.3s;
     }
     #status-line2 {
-      font-size: 0.58rem;
+      font-size: 0.6rem;
       letter-spacing: 1.5px;
-      color: rgba(201,168,76,0.5);
+      color: rgba(240,220,120,0.6);
       font-family: Georgia, serif;
       min-height: 10px;
       transition: color 0.3s;
@@ -239,31 +241,75 @@
 
     /* Turn indicator dot on right */
     #status-dot {
-      width: 8px;
-      height: 8px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
-      margin: auto 12px auto 0;
+      margin: auto 14px auto 0;
       flex-shrink: 0;
       background: transparent;
       transition: background 0.3s, box-shadow 0.3s;
     }
 
-    /* States */
-    #game-status-bar.phase-waiting   #status-phase { color: #c9a84c; }
-    #game-status-bar.phase-playing   #status-phase { color: #64b050; }
-    #game-status-bar.phase-myturn    #status-phase { color: #64b050; background: rgba(100,176,80,0.1); }
-    #game-status-bar.phase-check     #status-phase { color: #e84040; background: rgba(232,64,64,0.1); }
-    #game-status-bar.phase-over      #status-phase { color: #c9a84c; }
+    /* States — phase-waiting */
+    #game-status-bar.phase-waiting {
+      border-color: rgba(201,168,76,0.25);
+    }
+    #game-status-bar.phase-waiting #status-phase { color: #f0d080; }
+    #game-status-bar.phase-waiting #status-line1 { color: #f0d080; }
+    #game-status-bar.phase-waiting #status-line2 { color: rgba(240,208,128,0.55); }
 
-    #game-status-bar.phase-myturn    #status-line1 { color: #e8d06a; }
-    #game-status-bar.phase-check     #status-line1 { color: #ff6060; animation: status-pulse 0.5s infinite alternate; }
-    #game-status-bar.phase-over      #status-line1 { color: #fff; }
+    /* phase-oppturn */
+    #game-status-bar.phase-oppturn {
+      border-color: rgba(255,255,255,0.12);
+    }
+    #game-status-bar.phase-oppturn #status-phase { color: #ddd; }
+    #game-status-bar.phase-oppturn #status-line1 { color: #eee; }
+    #game-status-bar.phase-oppturn #status-line2 { color: rgba(220,220,220,0.55); }
+    #game-status-bar.phase-oppturn #status-dot   { background: rgba(220,220,220,0.35); }
 
-    #game-status-bar.phase-myturn    #status-dot { background: #64b050; box-shadow: 0 0 6px #4caf50; }
-    #game-status-bar.phase-oppturn   #status-dot { background: rgba(201,168,76,0.4); }
-    #game-status-bar.phase-check     #status-dot { background: #e84040; box-shadow: 0 0 6px #e84040; animation: status-pulse 0.5s infinite alternate; }
+    /* phase-myturn — bright green highlight */
+    #game-status-bar.phase-myturn {
+      border-color: rgba(100,200,80,0.45);
+      background: rgba(0,0,0,0.55);
+    }
+    #game-status-bar.phase-myturn #status-phase {
+      color: #7ee870;
+      background: rgba(100,200,80,0.12);
+    }
+    #game-status-bar.phase-myturn #status-line1 { color: #90f078; }
+    #game-status-bar.phase-myturn #status-line2 { color: rgba(140,240,120,0.65); }
+    #game-status-bar.phase-myturn #status-dot   { background: #64c850; box-shadow: 0 0 7px #4caf50; }
 
-    @keyframes status-pulse { from{opacity:1} to{opacity:0.2} }
+    /* phase-check — bright red */
+    #game-status-bar.phase-check {
+      border-color: rgba(240,60,60,0.5);
+      background: rgba(60,0,0,0.5);
+    }
+    #game-status-bar.phase-check #status-phase {
+      color: #ff7070;
+      background: rgba(220,40,40,0.15);
+    }
+    #game-status-bar.phase-check #status-line1 {
+      color: #ff8080;
+      animation: status-pulse 0.5s infinite alternate;
+    }
+    #game-status-bar.phase-check #status-line2 { color: rgba(255,140,140,0.7); }
+    #game-status-bar.phase-check #status-dot   {
+      background: #f04040;
+      box-shadow: 0 0 7px #e84040;
+      animation: status-pulse 0.5s infinite alternate;
+    }
+
+    /* phase-over */
+    #game-status-bar.phase-over {
+      border-color: rgba(201,168,76,0.35);
+      background: rgba(0,0,0,0.55);
+    }
+    #game-status-bar.phase-over #status-phase { color: #f0d080; }
+    #game-status-bar.phase-over #status-line1 { color: #ffffff; font-size: 0.82rem; }
+    #game-status-bar.phase-over #status-line2 { color: rgba(240,208,128,0.65); }
+
+    @keyframes status-pulse { from{opacity:1} to{opacity:0.25} }
 
     /* keep old #status hidden but present so JS refs don't break */
     #status { display: none; }
