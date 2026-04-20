@@ -79,112 +79,107 @@
       gap: 4px;
     }
 
-    /* ── Advanced Clock ── */
+    /* ── Advanced Clock (compact) ── */
     #clocks {
       display: flex;
       justify-content: space-between;
       width: 100%;
       max-width: 576px;
-      margin-bottom: 8px;
-      gap: 10px;
+      margin-bottom: 6px;
+      gap: 8px;
     }
 
     .clock-wrap {
       flex: 1;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      position: relative;
+      gap: 6px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid var(--tg-theme-button-color, #4a3010);
+      border-radius: 24px;
+      padding: 4px 10px 4px 4px;
+      transition: border-color 0.3s, box-shadow 0.3s;
     }
 
     .clock-svg-ring {
-      width: 100%;
-      max-width: 140px;
-      height: auto;
-      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.7));
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 1px 4px rgba(0,0,0,0.6));
       transition: filter 0.3s;
     }
 
-    /* Ring track */
     .ring-track {
       fill: none;
-      stroke: rgba(255,255,255,0.06);
-      stroke-width: 5;
+      stroke: rgba(255,255,255,0.08);
+      stroke-width: 6;
     }
-    /* Ring progress */
     .ring-progress {
       fill: none;
-      stroke-width: 5;
+      stroke-width: 6;
       stroke-linecap: round;
       transition: stroke-dashoffset 0.18s linear, stroke 0.4s ease;
       transform-origin: center;
       transform: rotate(-90deg);
     }
     .ring-bg-circle {
-      fill: #140d04;
-      stroke: rgba(201,168,76,0.18);
+      fill: #1a1005;
+      stroke: rgba(201,168,76,0.15);
       stroke-width: 1.5;
     }
-    .ring-bg-circle-inner {
-      fill: #1a1005;
-    }
 
-    /* Digit display inside ring */
+    .clock-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
     .clock-digits {
       font-family: 'Courier New', monospace;
-      font-size: 22px;
+      font-size: 1rem;
       font-weight: 700;
-      fill: #c9a84c;
-      letter-spacing: 2px;
-      text-anchor: middle;
-      dominant-baseline: middle;
-      transition: fill 0.3s;
+      color: #c9a84c;
+      letter-spacing: 1px;
+      line-height: 1.1;
+      transition: color 0.3s;
     }
     .clock-label {
       font-family: Georgia, serif;
-      font-size: 7px;
-      fill: rgba(201,168,76,0.5);
-      text-anchor: middle;
-      dominant-baseline: middle;
-      letter-spacing: 3px;
+      font-size: 0.55rem;
+      color: rgba(201,168,76,0.45);
+      letter-spacing: 2px;
       text-transform: uppercase;
+      line-height: 1;
     }
 
-    /* Active state — glow ring + bright digits */
-    .clock-wrap.active .ring-progress {
-      filter: drop-shadow(0 0 4px currentColor);
+    /* Active */
+    .clock-wrap.active {
+      border-color: #64b050;
+      box-shadow: 0 0 8px rgba(100,176,80,0.4);
     }
-    .clock-wrap.active .clock-digits {
-      fill: #e8d06a;
-    }
-    .clock-wrap.active .clock-svg-ring {
-      filter: drop-shadow(0 0 12px rgba(100,176,80,0.55)) drop-shadow(0 2px 8px rgba(0,0,0,0.7));
-    }
+    .clock-wrap.active .clock-digits { color: #e8d06a; }
+    .clock-wrap.active .ring-progress { filter: drop-shadow(0 0 3px currentColor); }
 
-    /* Low-time — red + urgent pulse */
+    /* Low-time */
+    .clock-wrap.low-time { border-color: #e84040; box-shadow: 0 0 8px rgba(232,64,64,0.4); }
     .clock-wrap.low-time .ring-progress { stroke: #e84040 !important; }
-    .clock-wrap.low-time .clock-digits  { fill: #ff6060 !important; animation: clock-urgent-pulse 0.6s ease-in-out infinite alternate; }
-    .clock-wrap.low-time .clock-svg-ring { filter: drop-shadow(0 0 14px rgba(232,64,64,0.7)) drop-shadow(0 2px 8px rgba(0,0,0,0.7)); }
-    .clock-wrap.low-time .ring-bg-circle { stroke: rgba(232,64,64,0.35); }
+    .clock-wrap.low-time .clock-digits  { color: #ff6060 !important; animation: clock-urgent-pulse 0.6s ease-in-out infinite alternate; }
 
-    /* Critical (<10s) — faster pulse */
+    /* Critical */
     .clock-wrap.critical .clock-digits { animation: clock-critical-pulse 0.3s ease-in-out infinite alternate !important; }
 
     @keyframes clock-urgent-pulse {
-      from { opacity: 1; }
-      to   { opacity: 0.45; }
+      from { opacity: 1; } to { opacity: 0.4; }
     }
     @keyframes clock-critical-pulse {
-      from { opacity: 1;   transform: scale(1); }
-      to   { opacity: 0.3; transform: scale(0.96); }
+      from { opacity: 1; } to { opacity: 0.25; }
     }
 
-    /* Tick flash on each second */
-    .clock-wrap.tick-flash .clock-digits { fill: #ffffff !important; }
+    /* Tick flash */
+    .clock-wrap.tick-flash .clock-digits { color: #ffffff !important; }
 
     /* Inactive dimmed */
-    .clock-wrap:not(.active):not(.low-time) .clock-digits { fill: rgba(201,168,76,0.45); }
-    .clock-wrap:not(.active):not(.low-time) .ring-progress { opacity: 0.35; }
+    .clock-wrap:not(.active):not(.low-time) .clock-digits { color: rgba(201,168,76,0.4); }
+    .clock-wrap:not(.active):not(.low-time) .ring-progress { opacity: 0.3; }
 
     #status {
       font-size: 0.72rem; letter-spacing: 3px; min-height: 22px; margin-bottom: 8px;
@@ -462,48 +457,30 @@
 <div id="clocks">
   <!-- White clock -->
   <div class="clock-wrap" id="white-clock-wrap">
-    <svg class="clock-svg-ring" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="wBg" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#2a1e0f"/>
-          <stop offset="100%" stop-color="#140d04"/>
-        </radialGradient>
-      </defs>
-      <!-- outer glow ring bg -->
-      <circle class="ring-bg-circle" cx="60" cy="60" r="55"/>
-      <circle class="ring-bg-circle-inner" cx="60" cy="60" r="49"/>
-      <!-- track -->
-      <circle class="ring-track" cx="60" cy="60" r="50"/>
-      <!-- progress -->
-      <circle class="ring-progress" id="white-ring" cx="60" cy="60" r="50"
-              stroke="#64b050"
-              stroke-dasharray="314.16"
-              stroke-dashoffset="0"/>
-      <!-- time text -->
-      <text class="clock-digits" id="white-clock" x="60" y="57">10:00</text>
-      <text class="clock-label" x="60" y="73">WHITE</text>
+    <svg class="clock-svg-ring" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+      <circle class="ring-bg-circle" cx="18" cy="18" r="16"/>
+      <circle class="ring-track" cx="18" cy="18" r="13"/>
+      <circle class="ring-progress" id="white-ring" cx="18" cy="18" r="13"
+              stroke="#64b050" stroke-dasharray="81.68" stroke-dashoffset="0"/>
     </svg>
+    <div class="clock-info">
+      <span class="clock-digits" id="white-clock">10:00</span>
+      <span class="clock-label">White</span>
+    </div>
   </div>
 
   <!-- Black clock -->
   <div class="clock-wrap" id="black-clock-wrap">
-    <svg class="clock-svg-ring" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="bBg" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#2a1e0f"/>
-          <stop offset="100%" stop-color="#140d04"/>
-        </radialGradient>
-      </defs>
-      <circle class="ring-bg-circle" cx="60" cy="60" r="55"/>
-      <circle class="ring-bg-circle-inner" cx="60" cy="60" r="49"/>
-      <circle class="ring-track" cx="60" cy="60" r="50"/>
-      <circle class="ring-progress" id="black-ring" cx="60" cy="60" r="50"
-              stroke="#64b050"
-              stroke-dasharray="314.16"
-              stroke-dashoffset="0"/>
-      <text class="clock-digits" id="black-clock" x="60" y="57">10:00</text>
-      <text class="clock-label" x="60" y="73">BLACK</text>
+    <svg class="clock-svg-ring" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+      <circle class="ring-bg-circle" cx="18" cy="18" r="16"/>
+      <circle class="ring-track" cx="18" cy="18" r="13"/>
+      <circle class="ring-progress" id="black-ring" cx="18" cy="18" r="13"
+              stroke="#64b050" stroke-dasharray="81.68" stroke-dashoffset="0"/>
     </svg>
+    <div class="clock-info">
+      <span class="clock-digits" id="black-clock">10:00</span>
+      <span class="clock-label">Black</span>
+    </div>
   </div>
 </div>
 
@@ -941,7 +918,7 @@
   // Uses performance.now() for sub-millisecond accuracy.
   // Ring circumference = 2π × 50 ≈ 314.16
 
-  const RING_CIRC = 314.16;
+  const RING_CIRC = 81.68; // r=13, 2π×13
   let timerRAF = null;
   let timerInitialWhite = 600;
   let timerInitialBlack = 600;
@@ -989,6 +966,7 @@
 
     if (wText) wText.textContent = formatTime(whiteTime);
     if (bText) bText.textContent = formatTime(blackTime);
+    // Note: clock-digits are now HTML <span> elements; color is set via CSS classes
 
     setRingProgress(wRing, whiteTime, timerInitialWhite);
     setRingProgress(bRing, blackTime, timerInitialBlack);
