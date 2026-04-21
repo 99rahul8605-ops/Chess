@@ -691,6 +691,41 @@
       padding: 0 14px; cursor: pointer; font-size: 1rem;
     }
     #chat-send:hover { background: rgba(201,168,76,0.1); }
+
+    /* ── Captured Pieces ── */
+    .captured-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 576px;
+      margin-bottom: 4px;
+      gap: 8px;
+    }
+    .captured-strip {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1px;
+      min-height: 18px;
+      padding: 2px 6px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .captured-piece {
+      font-size: 0.85rem;
+      line-height: 1;
+      opacity: 0.9;
+    }
+    .captured-advantage {
+      font-family: Georgia, serif;
+      font-size: 0.6rem;
+      color: rgba(255,255,255,0.5);
+      margin-left: 4px;
+      letter-spacing: 1px;
+    }
+    .captured-advantage.positive { color: #76ff76; }
   </style>
 </head>
 <body>
@@ -714,6 +749,13 @@
       <span class="player-color-badge">⚫ Black</span>
     </div>
   </div>
+</div>
+
+<div class="captured-row">
+  <!-- Black's captures (pieces white lost — shown under white player) -->
+  <div class="captured-strip" id="captured-by-black"></div>
+  <!-- White's captures (pieces black lost — shown under black player) -->
+  <div class="captured-strip" id="captured-by-white"></div>
 </div>
 
 <div id="clocks">
@@ -1636,6 +1678,78 @@
     }
   }
 
+  // ── Captured Pieces ────────────────────────────────────────────
+  const PIECE_SYMBOLS = {
+    'P': '♟', 'N': '♞', 'B': '♝', 'R': '♜', 'Q': '♛',  // black pieces (white captured)
+    'p': '♙', 'n': '♘', 'b': '♗', 'r': '♖', 'q': '♕'   // white pieces (black captured)
+  };
+  const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+  const START_COUNTS = { p: 8, n: 2, b: 2, r: 2, q: 1, k: 1 };
+
+  function updateCapturedPieces() {
+    if (!boardState) return;
+
+    // Count what's still on board
+    const onBoard = {};
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const p = boardState[r][c];
+      if (p) onBoard[p] = (onBoard[p] || 0) + 1;
+    }
+
+    // White pieces captured by black (lowercase missing from board)
+    const capturedByBlack = [];
+    let blackAdvantage = 0;
+    for (const [piece, start] of Object.entries(START_COUNTS)) {
+      if (piece === 'k') continue;
+      const onBoardCount = onBoard[piece] || 0;
+      const missing = start - onBoardCount;
+      for (let i = 0; i < missing; i++) capturedByBlack.push(piece);
+      blackAdvantage += missing * (PIECE_VALUES[piece] || 0);
+    }
+
+    // Black pieces captured by white (uppercase missing from board)
+    const capturedByWhite = [];
+    let whiteAdvantage = 0;
+    for (const [piece, start] of Object.entries(START_COUNTS)) {
+      if (piece === 'k') continue;
+      const upper = piece.toUpperCase();
+      const onBoardCount = onBoard[upper] || 0;
+      const missing = start - onBoardCount;
+      for (let i = 0; i < missing; i++) capturedByWhite.push(upper);
+      whiteAdvantage += missing * (PIECE_VALUES[piece] || 0);
+    }
+
+    // Piece order for display: Q R B N P
+    const order = ['Q','R','B','N','P'];
+    capturedByWhite.sort((a,b) => order.indexOf(a) - order.indexOf(b));
+    const orderL = ['q','r','b','n','p'];
+    capturedByBlack.sort((a,b) => orderL.indexOf(a) - orderL.indexOf(b));
+
+    const diff = whiteAdvantage - blackAdvantage;
+
+    // Render
+    const byBlackEl = document.getElementById('captured-by-black');
+    const byWhiteEl = document.getElementById('captured-by-white');
+    if (!byBlackEl || !byWhiteEl) return;
+
+    // captured-by-black: white pieces captured → show white piece symbols
+    byBlackEl.innerHTML = capturedByBlack.map(p =>
+      `<span class="captured-piece" title="captured">${PIECE_SYMBOLS[p]}</span>`
+    ).join('');
+    if (diff < 0) {
+      byBlackEl.innerHTML += `<span class="captured-advantage positive">+${Math.abs(diff)}</span>`;
+    }
+
+    // captured-by-white: black pieces captured → show black piece symbols
+    byWhiteEl.innerHTML = capturedByWhite.map(p =>
+      `<span class="captured-piece" title="captured">${PIECE_SYMBOLS[p]}</span>`
+    ).join('');
+    if (diff > 0) {
+      byWhiteEl.innerHTML += `<span class="captured-advantage positive">+${diff}</span>`;
+    }
+  }
+  // ── End Captured Pieces ─────────────────────────────────────────
+
   function renderBoard() {
     boardEl.innerHTML = '';
     boardEl.className = '';
@@ -1661,6 +1775,7 @@
       cell.onclick = (() => { const i=int; return ()=>onCellClick(i.row,i.col); })();
       boardEl.appendChild(cell);
     }
+    updateCapturedPieces();
   }
 
   async function onCellClick(row, col) {
