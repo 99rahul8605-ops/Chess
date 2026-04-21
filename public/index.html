@@ -811,6 +811,26 @@
     <button id="go-exit-btn" onclick="closeGameOverOverlay()">✕ CLOSE</button>
     <button id="go-new-btn" onclick="newGame()">⟳ NEW GAME</button>
   </div>
+
+  <!-- Resign Confirm Overlay -->
+  <div id="resign-overlay">
+    <div id="resign-overlay-icon">🏳️</div>
+    <div id="resign-overlay-title">RESIGN?</div>
+    <div class="resign-overlay-btns">
+      <button id="resign-confirm-btn" onclick="doResign()">RESIGN</button>
+      <button id="resign-cancel-btn" onclick="closeResignOverlay()">CANCEL</button>
+    </div>
+  </div>
+
+  <!-- Draw Confirm Overlay -->
+  <div id="draw-confirm-overlay">
+    <div style="font-size:2.8rem">🤝</div>
+    <div id="draw-overlay-title">OFFER DRAW?</div>
+    <div class="resign-overlay-btns">
+      <button id="draw-confirm-btn" onclick="doOfferDraw()">OFFER</button>
+      <button id="draw-cancel-btn" onclick="closeDrawOverlay()">CANCEL</button>
+    </div>
+  </div>
 </div>
 
 <div id="controls">
@@ -1540,31 +1560,38 @@
     } catch (err) { console.error(err); }
   }
 
-  async function resignGame() {
+  function resignGame() {
     if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
-    showConfirm({
-      icon: '🏳️', title: 'RESIGN GAME?',
-      sub: 'You will lose the match.\nThis cannot be undone.',
-      yesLabel: 'RESIGN', yesClass: 'danger',
-      onYes: async () => {
-        try {
-          const res = await fetch(`/api/game/${gameId}/resign`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId })
-          });
-          const data = await res.json();
-          if (res.ok) {
-            gameOver = true;
-            updateStatus(data);
-            updatePlayerDisplays(data);
-            renderBoard();
-            stopLocalTimer();
-          }
-        } catch (err) { console.error(err); }
-      }
-    });
+    document.getElementById('resign-overlay').classList.add('show');
+    tg.HapticFeedback?.impactOccurred('medium');
   }
+
+  function closeResignOverlay() {
+    document.getElementById('resign-overlay').classList.remove('show');
+    tg.HapticFeedback?.impactOccurred('light');
+  }
+
+  async function doResign() {
+    document.getElementById('resign-overlay').classList.remove('show');
+    try {
+      const res = await fetch(`/api/game/${gameId}/resign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        gameOver = true;
+        updateStatus(data);
+        updatePlayerDisplays(data);
+        renderBoard();
+        stopLocalTimer();
+      }
+    } catch (err) { console.error(err); }
+  }
+
+  window.closeResignOverlay = closeResignOverlay;
+  window.doResign = doResign;
 
   async function newGame() {
     try {
@@ -1976,8 +2003,19 @@
     updateDrawButton();
   }
 
-  async function offerDraw() {
+  function offerDraw() {
     if (!myColor || myColor === 'spectator' || gameOver || waitingForOpponent || drawOfferPending) return;
+    document.getElementById('draw-confirm-overlay').classList.add('show');
+    tg.HapticFeedback?.impactOccurred('medium');
+  }
+
+  function closeDrawOverlay() {
+    document.getElementById('draw-confirm-overlay').classList.remove('show');
+    tg.HapticFeedback?.impactOccurred('light');
+  }
+
+  async function doOfferDraw() {
+    document.getElementById('draw-confirm-overlay').classList.remove('show');
     try {
       const res = await fetch(`/api/game/${gameId}/draw-offer`, {
         method: 'POST',
@@ -1991,6 +2029,9 @@
       }
     } catch (err) { console.error(err); }
   }
+
+  window.closeDrawOverlay = closeDrawOverlay;
+  window.doOfferDraw = doOfferDraw;
 
   async function acceptDraw() {
     try {
@@ -2083,31 +2124,7 @@
   window.closeGameOverOverlay = closeGameOverOverlay;
   // ── End Game Over Overlay ────────────────────────────────────────
 
-  // ── Confirm Dialog ──────────────────────────────────────────
-  let _confirmCallback = null;
-  function showConfirm({ icon, title, sub, yesLabel, yesClass, onYes }) {
-    document.getElementById('confirm-icon').textContent  = icon  || '⚠️';
-    document.getElementById('confirm-title').textContent = title || 'ARE YOU SURE?';
-    document.getElementById('confirm-sub').textContent   = sub   || '';
-    const yesBtn = document.getElementById('confirm-yes-btn');
-    yesBtn.textContent = yesLabel || 'CONFIRM';
-    yesBtn.className   = 'confirm-yes ' + (yesClass || 'danger');
-    _confirmCallback   = onYes || null;
-    document.getElementById('confirm-modal').classList.add('show');
-    tg.HapticFeedback?.impactOccurred('medium');
-  }
-  function confirmYes() {
-    document.getElementById('confirm-modal').classList.remove('show');
-    if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
-  }
-  function confirmNo() {
-    document.getElementById('confirm-modal').classList.remove('show');
-    _confirmCallback = null;
-    tg.HapticFeedback?.impactOccurred('light');
-  }
-  window.showConfirm = showConfirm;
-  window.confirmYes  = confirmYes;
-  window.confirmNo   = confirmNo;
+  // confirm handled via board overlays
 
   window.resignGame = resignGame;
   window.newGame = newGame;
