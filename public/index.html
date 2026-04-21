@@ -1501,8 +1501,14 @@
   }
 
   // --- API & Game Flow ---
+  const STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
   async function joinGame() {
     boardEl.innerHTML = '';
+    // Show board immediately with starting position so it's never blank
+    boardState = fenToBoard(STARTING_FEN);
+    currentTurn = 'w';
+    renderBoard();
     try {
       const res = await fetch(`/api/game/${gameId}/join`, {
         method: 'POST',
@@ -1513,8 +1519,8 @@
       const data = await res.json();
       if (data.color) myColor = data.color;
       waitingForOpponent = data.waitingForOpponent || data.waitingForAssignment;
-      boardState = fenToBoard(data.fen);
-      currentTurn = data.turn;
+      boardState = fenToBoard(data.fen || STARTING_FEN);
+      currentTurn = data.turn || 'w';
       gameOver = data.isGameOver || false;
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
@@ -1523,8 +1529,13 @@
       updateStatus(data);
       startPolling();
     } catch (err) {
-      document.getElementById('status').textContent = 'Failed to join.';
-      boardEl.innerHTML = `<div class="error">${err.message}</div>`;
+      // API unavailable — still show the board in offline/preview mode
+      myColor = 'white';
+      waitingForOpponent = false;
+      boardState = fenToBoard(STARTING_FEN);
+      currentTurn = 'w';
+      toggleWaitingOverlay(false);
+      renderBoard();
     }
   }
 
