@@ -3,7 +3,7 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>♜ Chess · Time Control</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js" onerror="window.Telegram={WebApp:{expand:()=>{},ready:()=>{},HapticFeedback:{impactOccurred:()=>{},notificationOccurred:()=>{},selectionChanged:()=>{}},initDataUnsafe:{},expand:()=>{},ready:()=>{}}}"></script>
   <style>
     /* ========== COMPLETE STYLES ========== */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -861,7 +861,10 @@
 
 <script>
   // ==================== COMPLETE JAVASCRIPT ====================
-  const tg = window.Telegram.WebApp;
+  const tg = window.Telegram?.WebApp || {
+    expand: ()=>{}, ready: ()=>{}, initDataUnsafe: {},
+    HapticFeedback: { impactOccurred:()=>{}, notificationOccurred:()=>{}, selectionChanged:()=>{} }
+  };
   tg.expand();
   tg.ready();
 
@@ -905,8 +908,8 @@
         url.searchParams.set('game', gameId);
         window.history.replaceState({}, '', url);
       } catch (e) {
-        document.getElementById('board').innerHTML = '<div class="error">Could not create game.</div>';
-        throw e;
+        // No server — use a local ID so the game still loads
+        gameId = 'local_' + Math.random().toString(36).substr(2, 9);
       }
     }
   }
