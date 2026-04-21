@@ -752,9 +752,7 @@
 </div>
 
 <div class="captured-row">
-  <!-- Black's captures (pieces white lost — shown under white player) -->
   <div class="captured-strip" id="captured-by-black"></div>
-  <!-- White's captures (pieces black lost — shown under black player) -->
   <div class="captured-strip" id="captured-by-white"></div>
 </div>
 
@@ -811,26 +809,7 @@
     <button id="go-exit-btn" onclick="closeGameOverOverlay()">✕ CLOSE</button>
     <button id="go-new-btn" onclick="newGame()">⟳ NEW GAME</button>
   </div>
-
-  <!-- Resign Confirm Overlay -->
-  <div id="resign-overlay">
-    <div id="resign-overlay-icon">🏳️</div>
-    <div id="resign-overlay-title">RESIGN?</div>
-    <div class="resign-overlay-btns">
-      <button id="resign-confirm-btn" onclick="doResign()">RESIGN</button>
-      <button id="resign-cancel-btn" onclick="closeResignOverlay()">CANCEL</button>
-    </div>
-  </div>
-
-  <!-- Draw Confirm Overlay -->
-  <div id="draw-confirm-overlay">
-    <div style="font-size:2.8rem">🤝</div>
-    <div id="draw-overlay-title">OFFER DRAW?</div>
-    <div class="resign-overlay-btns">
-      <button id="draw-confirm-btn" onclick="doOfferDraw()">OFFER</button>
-      <button id="draw-cancel-btn" onclick="closeDrawOverlay()">CANCEL</button>
-    </div>
-  </div>
+  <!-- REMOVED: #resign-overlay and #draw-confirm-overlay -->
 </div>
 
 <div id="controls">
@@ -877,19 +856,6 @@
       <div class="promo-piece" data-piece="n">♘</div>
     </div>
     <button class="close-btn" onclick="cancelPromotion()">Cancel</button>
-  </div>
-</div>
-
-<!-- Confirm Dialog -->
-<div id="confirm-modal">
-  <div class="confirm-box">
-    <span class="confirm-icon" id="confirm-icon">⚠️</span>
-    <div class="confirm-title" id="confirm-title">ARE YOU SURE?</div>
-    <div class="confirm-sub" id="confirm-sub"></div>
-    <div class="confirm-btns">
-      <button class="confirm-yes danger" id="confirm-yes-btn" onclick="confirmYes()">CONFIRM</button>
-      <button class="confirm-no" onclick="confirmNo()">CANCEL</button>
-    </div>
   </div>
 </div>
 
@@ -1241,7 +1207,6 @@
         }
       }
     } else if (pieceType==='K') {
-      // Normal moves
       for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) if(dr||dc) {
         const nr=row+dr, nc=col+dc;
         if (nr>=0&&nr<8&&nc>=0&&nc<8) {
@@ -1278,9 +1243,6 @@
   }
 
   // ── Advanced Clock System ──────────────────────────────────────────
-  // Uses performance.now() for sub-millisecond accuracy.
-  // Ring circumference = 2π × 50 ≈ 314.16
-
   const RING_CIRC = 81.68; // r=13, 2π×13
   let timerRAF = null;
   let timerInitialWhite = 600;
@@ -1288,12 +1250,10 @@
   let lastSecondWhite = -1;
   let lastSecondBlack = -1;
 
-  // Wall-clock anchor: when the current timer segment started and what the time was then.
-  // This means server syncs just update the anchor — the RAF loop never resets.
-  let timerAnchorTs = null;    // performance.now() value at last anchor set
-  let timerAnchorWt = null;    // whiteTime at last anchor
-  let timerAnchorBt = null;    // blackTime at last anchor
-  let timerAnchorTurn = null;  // whose turn at last anchor
+  let timerAnchorTs = null;
+  let timerAnchorWt = null;
+  let timerAnchorBt = null;
+  let timerAnchorTurn = null;
 
   function formatTime(s) {
     if (s <= 0) return '0:00';
@@ -1329,7 +1289,6 @@
 
     if (wText) wText.textContent = formatTime(whiteTime);
     if (bText) bText.textContent = formatTime(blackTime);
-    // Note: clock-digits are now HTML <span> elements; color is set via CSS classes
 
     setRingProgress(wRing, whiteTime, timerInitialWhite);
     setRingProgress(bRing, blackTime, timerInitialBlack);
@@ -1348,7 +1307,6 @@
       bWrap.classList.toggle('critical',  blackTime < 10 && blackTime > 0);
     }
 
-    // Tick-flash once per second
     const ws = Math.floor(whiteTime), bs = Math.floor(blackTime);
     if (wActive && ws !== lastSecondWhite) { lastSecondWhite = ws; tickFlash('white-clock-wrap'); }
     if (bActive && bs !== lastSecondBlack) { lastSecondBlack = bs; tickFlash('black-clock-wrap'); }
@@ -1360,7 +1318,6 @@
   }
 
   function setTimerAnchor() {
-    // Record current moment as the reference point for the running clock.
     timerAnchorTs   = performance.now();
     timerAnchorWt   = whiteTime;
     timerAnchorBt   = blackTime;
@@ -1374,10 +1331,8 @@
     setTimerAnchor();
 
     function rafLoop(ts) {
-      // Compute elapsed since the last anchor (in seconds)
       const elapsed = (performance.now() - timerAnchorTs) / 1000;
 
-      // Derive current times from anchor — no accumulation error
       if (timerAnchorTurn === 'w') {
         whiteTime = Math.max(0, timerAnchorWt - elapsed);
         blackTime = timerAnchorBt;
@@ -1388,17 +1343,14 @@
 
       updateClockDisplay();
 
-      // Check time-out
       if (timerAnchorTurn === 'w' && whiteTime <= 0) {
         whiteTime = 0; gameOver = true; stopLocalTimer(); updateClockDisplay();
         document.getElementById('status').textContent = 'BLACK WINS ON TIME!';
-        document.getElementById('status').className = 'checkmate';
         return;
       }
       if (timerAnchorTurn === 'b' && blackTime <= 0) {
         blackTime = 0; gameOver = true; stopLocalTimer(); updateClockDisplay();
         document.getElementById('status').textContent = 'WHITE WINS ON TIME!';
-        document.getElementById('status').className = 'checkmate';
         return;
       }
 
@@ -1409,10 +1361,8 @@
   }
 
   function syncTimeFromServer(data) {
-    // Track initial time for ring-progress ratio (only grows if server sends bigger value)
     if (data.whiteTime !== undefined) {
       if (timerInitialWhite <= 0 || data.whiteTime > timerInitialWhite) timerInitialWhite = data.whiteTime;
-      // Accept server's live time — it already has elapsed subtracted
       whiteTime = data.whiteTime;
     }
     if (data.blackTime !== undefined) {
@@ -1424,8 +1374,6 @@
       stopLocalTimer(); updateClockDisplay(); return;
     }
 
-    // Always re-anchor from server values so the local countdown starts
-    // from the correct live time rather than drifting from an old base.
     startLocalTimer();
   }
   // ── End Advanced Clock System ─────────────────────────────────────
@@ -1522,7 +1470,6 @@
         stopLocalTimer();
         clearInterval(updateInterval);
       }
-      // Draw offer state from server
       handleDrawOfferState(data.drawOffer || null);
     } catch (err) {}
   }
@@ -1560,38 +1507,29 @@
     } catch (err) { console.error(err); }
   }
 
+  // ---------- RESIGN (simplified with confirm) ----------
   function resignGame() {
-    if (!myColor || myColor==='spectator' || waitingForOpponent || gameOver) return;
-    document.getElementById('resign-overlay').classList.add('show');
-    tg.HapticFeedback?.impactOccurred('medium');
-  }
-
-  function closeResignOverlay() {
-    document.getElementById('resign-overlay').classList.remove('show');
-    tg.HapticFeedback?.impactOccurred('light');
-  }
-
-  async function doResign() {
-    document.getElementById('resign-overlay').classList.remove('show');
-    try {
-      const res = await fetch(`/api/game/${gameId}/resign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      const data = await res.json();
+    if (!myColor || myColor === 'spectator' || waitingForOpponent || gameOver) return;
+    if (!confirm('Are you sure you want to resign?')) return;
+    
+    fetch(`/api/game/${gameId}/resign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    })
+    .then(res => res.json())
+    .then(data => {
       if (res.ok) {
         gameOver = true;
         updateStatus(data);
         updatePlayerDisplays(data);
         renderBoard();
         stopLocalTimer();
+        tg.HapticFeedback?.notificationOccurred('warning');
       }
-    } catch (err) { console.error(err); }
+    })
+    .catch(err => console.error(err));
   }
-
-  window.closeResignOverlay = closeResignOverlay;
-  window.doResign = doResign;
 
   async function newGame() {
     try {
@@ -1604,7 +1542,6 @@
   }
 
   function updateStatus(data) {
-    // Legacy hidden element (some code paths still reference it)
     const s = document.getElementById('status');
     const bar = document.getElementById('game-status-bar');
     const phase = document.getElementById('status-phase');
@@ -1614,7 +1551,6 @@
     const info  = document.getElementById('info');
     if (!bar) return;
 
-    // Helper to set the bar state
     function setBar(phaseClass, phaseLabel, mainText, subText) {
       bar.className = '';
       bar.classList.add('phase-' + phaseClass);
@@ -1623,7 +1559,6 @@
       line2.textContent = subText || '';
     }
 
-    // ── Game over ──────────────────────────────────────────────────
     if (data.isGameOver) {
       let headline, sub;
       if (data.winner) {
@@ -1645,12 +1580,10 @@
       setBar('over', 'END', headline, sub);
       if (info) { info.textContent = 'Game finished'; info.style.color = '#c9a84c'; }
       if (s) s.textContent = headline;
-      // Show the big board overlay
       showGameOverOverlay(data);
       return;
     }
 
-    // ── Waiting for players ────────────────────────────────────────
     const hasWhite = !!(data.whiteUserId);
     const hasBlack = !!(data.blackUserId);
 
@@ -1662,7 +1595,6 @@
     }
 
     if (data.waitingForAssignment || waitingForOpponent || (!hasWhite || !hasBlack)) {
-      // One player is in
       const joinedName = hasWhite
         ? (data.whitePlayer?.firstName || 'White')
         : (data.blackPlayer?.firstName || 'Black');
@@ -1675,11 +1607,9 @@
       return;
     }
 
-    // ── Both joined — show VS header once ─────────────────────────
     const whiteName = data.whitePlayer?.firstName || 'White';
     const blackName = data.blackPlayer?.firstName || 'Black';
 
-    // ── Active game ────────────────────────────────────────────────
     const myTurn = (myColor==='white' && data.turn==='w') || (myColor==='black' && data.turn==='b');
     const activeName = data.turn === 'w' ? whiteName : blackName;
     const activeIcon = data.turn === 'w' ? '⚪' : '⚫';
@@ -1707,8 +1637,8 @@
 
   // ── Captured Pieces ────────────────────────────────────────────
   const PIECE_SYMBOLS = {
-    'P': '♟', 'N': '♞', 'B': '♝', 'R': '♜', 'Q': '♛',  // black pieces (white captured)
-    'p': '♙', 'n': '♘', 'b': '♗', 'r': '♖', 'q': '♕'   // white pieces (black captured)
+    'P': '♟', 'N': '♞', 'B': '♝', 'R': '♜', 'Q': '♛',
+    'p': '♙', 'n': '♘', 'b': '♗', 'r': '♖', 'q': '♕'
   };
   const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
   const START_COUNTS = { p: 8, n: 2, b: 2, r: 2, q: 1, k: 1 };
@@ -1716,14 +1646,12 @@
   function updateCapturedPieces() {
     if (!boardState) return;
 
-    // Count what's still on board
     const onBoard = {};
     for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
       const p = boardState[r][c];
       if (p) onBoard[p] = (onBoard[p] || 0) + 1;
     }
 
-    // White pieces captured by black (lowercase missing from board)
     const capturedByBlack = [];
     let blackAdvantage = 0;
     for (const [piece, start] of Object.entries(START_COUNTS)) {
@@ -1734,7 +1662,6 @@
       blackAdvantage += missing * (PIECE_VALUES[piece] || 0);
     }
 
-    // Black pieces captured by white (uppercase missing from board)
     const capturedByWhite = [];
     let whiteAdvantage = 0;
     for (const [piece, start] of Object.entries(START_COUNTS)) {
@@ -1746,7 +1673,6 @@
       whiteAdvantage += missing * (PIECE_VALUES[piece] || 0);
     }
 
-    // Piece order for display: Q R B N P
     const order = ['Q','R','B','N','P'];
     capturedByWhite.sort((a,b) => order.indexOf(a) - order.indexOf(b));
     const orderL = ['q','r','b','n','p'];
@@ -1754,12 +1680,10 @@
 
     const diff = whiteAdvantage - blackAdvantage;
 
-    // Render
     const byBlackEl = document.getElementById('captured-by-black');
     const byWhiteEl = document.getElementById('captured-by-white');
     if (!byBlackEl || !byWhiteEl) return;
 
-    // captured-by-black: white pieces captured → show white piece symbols
     byBlackEl.innerHTML = capturedByBlack.map(p =>
       `<span class="captured-piece" title="captured">${PIECE_SYMBOLS[p]}</span>`
     ).join('');
@@ -1767,7 +1691,6 @@
       byBlackEl.innerHTML += `<span class="captured-advantage positive">+${Math.abs(diff)}</span>`;
     }
 
-    // captured-by-white: black pieces captured → show black piece symbols
     byWhiteEl.innerHTML = capturedByWhite.map(p =>
       `<span class="captured-piece" title="captured">${PIECE_SYMBOLS[p]}</span>`
     ).join('');
@@ -1959,8 +1882,8 @@
   })();
 
   // ── Draw Offer Logic ─────────────────────────────────────────────
-  let drawOfferPending = null;      // whose offer is showing: null | 'white' | 'black'
-  let drawOfferSentByMe = false;    // I sent the current offer
+  let drawOfferPending = null;
+  let drawOfferSentByMe = false;
 
   function updateDrawButton() {
     const btn = document.getElementById('draw-btn');
@@ -1977,7 +1900,6 @@
   }
 
   function handleDrawOfferState(drawOffer) {
-    // drawOffer = null | 'white' | 'black' (color that offered)
     if (!drawOffer) {
       drawOfferPending = null;
       drawOfferSentByMe = false;
@@ -1985,7 +1907,7 @@
       updateDrawButton();
       return;
     }
-    if (drawOfferPending === drawOffer) return; // no change
+    if (drawOfferPending === drawOffer) return;
     drawOfferPending = drawOffer;
 
     const offererColor = drawOffer;
@@ -1993,45 +1915,33 @@
     drawOfferSentByMe = iAmTheOfferer;
 
     if (iAmTheOfferer) {
-      // Just show the button as disabled; no banner for sender
       showDrawBanner(false);
     } else if (myColor && myColor !== 'spectator') {
-      // I'm the opponent — show the accept/decline banner
       showDrawBanner(true);
       tg.HapticFeedback?.notificationOccurred('warning');
     }
     updateDrawButton();
   }
 
+  // ---------- DRAW OFFER (simplified with confirm) ----------
   function offerDraw() {
     if (!myColor || myColor === 'spectator' || gameOver || waitingForOpponent || drawOfferPending) return;
-    document.getElementById('draw-confirm-overlay').classList.add('show');
-    tg.HapticFeedback?.impactOccurred('medium');
-  }
-
-  function closeDrawOverlay() {
-    document.getElementById('draw-confirm-overlay').classList.remove('show');
-    tg.HapticFeedback?.impactOccurred('light');
-  }
-
-  async function doOfferDraw() {
-    document.getElementById('draw-confirm-overlay').classList.remove('show');
-    try {
-      const res = await fetch(`/api/game/${gameId}/draw-offer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      const data = await res.json();
+    if (!confirm('Offer a draw to your opponent?')) return;
+    
+    fetch(`/api/game/${gameId}/draw-offer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    })
+    .then(res => res.json())
+    .then(data => {
       if (res.ok) {
         handleDrawOfferState(data.drawOffer);
         tg.HapticFeedback?.impactOccurred('medium');
       }
-    } catch (err) { console.error(err); }
+    })
+    .catch(err => console.error(err));
   }
-
-  window.closeDrawOverlay = closeDrawOverlay;
-  window.doOfferDraw = doOfferDraw;
 
   async function acceptDraw() {
     try {
@@ -2101,7 +2011,6 @@
         headline.textContent = 'YOU LOSE';
         sub.textContent      = `${winName} defeats ${lostName}`;
       } else {
-        // Spectator
         emoji.textContent    = '🏆';
         headline.textContent = `${winName.toUpperCase()} WINS!`;
         sub.textContent      = `${winName} defeats ${lostName}`;
@@ -2123,8 +2032,6 @@
 
   window.closeGameOverOverlay = closeGameOverOverlay;
   // ── End Game Over Overlay ────────────────────────────────────────
-
-  // confirm handled via board overlays
 
   window.resignGame = resignGame;
   window.newGame = newGame;
