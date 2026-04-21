@@ -188,80 +188,96 @@
       margin-bottom: 8px;
       border-radius: 10px;
       overflow: hidden;
-      background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(201,168,76,0.18);
-      min-height: 38px;
+      background: rgba(0,0,0,0.6);
+      border: 1.5px solid rgba(255,255,255,0.12);
+      min-height: 44px;
       display: flex;
       align-items: stretch;
     }
-
-    /* Phase pill on left */
     #status-phase {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 12px;
-      font-size: 0.6rem;
-      letter-spacing: 2.5px;
-      text-transform: uppercase;
-      font-family: Georgia, serif;
-      white-space: nowrap;
-      border-right: 1px solid rgba(201,168,76,0.15);
-      background: rgba(0,0,0,0.25);
-      min-width: 68px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 12px; font-size: 0.58rem; letter-spacing: 2px;
+      text-transform: uppercase; font-family: Georgia, serif;
+      white-space: nowrap; min-width: 76px; font-weight: bold;
+      border-right: 1px solid rgba(255,255,255,0.1);
+      background: rgba(0,0,0,0.35);
       transition: background 0.3s, color 0.3s;
+      color: #ffffff;
     }
-
-    /* Main message */
     #status-main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 5px 12px;
-      gap: 1px;
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; padding: 5px 12px; gap: 3px;
     }
     #status-line1 {
-      font-size: 0.72rem;
-      letter-spacing: 2.5px;
-      font-family: Georgia, serif;
-      color: #c9a84c;
-      transition: color 0.3s;
+      font-size: 0.8rem; letter-spacing: 2px;
+      font-family: Georgia, serif; font-weight: bold;
+      color: #ffffff; transition: color 0.3s;
     }
     #status-line2 {
-      font-size: 0.58rem;
-      letter-spacing: 1.5px;
-      color: rgba(201,168,76,0.5);
-      font-family: Georgia, serif;
-      min-height: 10px;
+      font-size: 0.6rem; letter-spacing: 1.5px;
+      color: rgba(255,255,255,0.55);
+      font-family: Georgia, serif; min-height: 10px;
       transition: color 0.3s;
     }
-
-    /* Turn indicator dot on right */
     #status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin: auto 12px auto 0;
-      flex-shrink: 0;
+      width: 10px; height: 10px; border-radius: 50%;
+      margin: auto 14px auto 0; flex-shrink: 0;
       background: transparent;
       transition: background 0.3s, box-shadow 0.3s;
     }
 
-    /* States */
-    #game-status-bar.phase-waiting   #status-phase { color: #c9a84c; }
-    #game-status-bar.phase-playing   #status-phase { color: #64b050; }
-    #game-status-bar.phase-myturn    #status-phase { color: #64b050; background: rgba(100,176,80,0.1); }
-    #game-status-bar.phase-check     #status-phase { color: #e84040; background: rgba(232,64,64,0.1); }
-    #game-status-bar.phase-over      #status-phase { color: #c9a84c; }
+    /* WAITING — amber */
+    #game-status-bar.phase-waiting {
+      border-color: rgba(201,168,76,0.4);
+      background: rgba(40,25,5,0.75);
+    }
+    #game-status-bar.phase-waiting #status-phase { color: #f5c842; background: rgba(201,168,76,0.15); }
+    #game-status-bar.phase-waiting #status-line1 { color: #f5c842; }
+    #game-status-bar.phase-waiting #status-line2 { color: rgba(245,200,66,0.6); }
+    #game-status-bar.phase-waiting #status-dot   { background: rgba(245,200,66,0.4); }
 
-    #game-status-bar.phase-myturn    #status-line1 { color: #e8d06a; }
-    #game-status-bar.phase-check     #status-line1 { color: #ff6060; animation: status-pulse 0.5s infinite alternate; }
-    #game-status-bar.phase-over      #status-line1 { color: #fff; }
+    /* OPPONENT TURN — white/neutral */
+    #game-status-bar.phase-oppturn {
+      border-color: rgba(255,255,255,0.15);
+      background: rgba(0,0,0,0.6);
+    }
+    #game-status-bar.phase-oppturn #status-phase { color: #ccc; }
+    #game-status-bar.phase-oppturn #status-line1 { color: #eeeeee; }
+    #game-status-bar.phase-oppturn #status-line2 { color: rgba(200,200,200,0.6); }
+    #game-status-bar.phase-oppturn #status-dot   { background: rgba(200,200,200,0.3); }
 
-    #game-status-bar.phase-myturn    #status-dot { background: #64b050; box-shadow: 0 0 6px #4caf50; }
-    #game-status-bar.phase-oppturn   #status-dot { background: rgba(201,168,76,0.4); }
-    #game-status-bar.phase-check     #status-dot { background: #e84040; box-shadow: 0 0 6px #e84040; animation: status-pulse 0.5s infinite alternate; }
+    /* YOUR TURN — bright green, solid */
+    #game-status-bar.phase-myturn {
+      border-color: #4caf50;
+      background: rgba(0,40,0,0.65);
+      box-shadow: 0 0 10px rgba(76,175,80,0.3);
+    }
+    #game-status-bar.phase-myturn #status-phase {
+      color: #ffffff; background: rgba(76,175,80,0.3);
+    }
+    #game-status-bar.phase-myturn #status-line1 { color: #76ff76; }
+    #game-status-bar.phase-myturn #status-line2 { color: rgba(120,255,120,0.7); }
+    #game-status-bar.phase-myturn #status-dot   { background: #4caf50; box-shadow: 0 0 8px #4caf50; }
+
+    /* CHECK — bright red */
+    #game-status-bar.phase-check {
+      border-color: #f44336;
+      background: rgba(60,0,0,0.7);
+      box-shadow: 0 0 10px rgba(244,67,54,0.4);
+    }
+    #game-status-bar.phase-check #status-phase { color: #ffffff; background: rgba(244,67,54,0.35); }
+    #game-status-bar.phase-check #status-line1 { color: #ff6b6b; animation: status-pulse 0.5s infinite alternate; }
+    #game-status-bar.phase-check #status-line2 { color: rgba(255,150,150,0.7); }
+    #game-status-bar.phase-check #status-dot   { background: #f44336; box-shadow: 0 0 8px #f44336; animation: status-pulse 0.5s infinite alternate; }
+
+    /* GAME OVER */
+    #game-status-bar.phase-over {
+      border-color: rgba(201,168,76,0.5);
+      background: rgba(20,12,3,0.8);
+    }
+    #game-status-bar.phase-over #status-phase { color: #f5c842; background: rgba(201,168,76,0.1); }
+    #game-status-bar.phase-over #status-line1 { color: #ffffff; font-size: 0.85rem; }
+    #game-status-bar.phase-over #status-line2 { color: rgba(245,200,66,0.7); }
 
     @keyframes status-pulse { from{opacity:1} to{opacity:0.2} }
 
@@ -799,6 +815,19 @@
       <div class="promo-piece" data-piece="n">♘</div>
     </div>
     <button class="close-btn" onclick="cancelPromotion()">Cancel</button>
+  </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div id="confirm-modal">
+  <div class="confirm-box">
+    <span class="confirm-icon" id="confirm-icon">⚠️</span>
+    <div class="confirm-title" id="confirm-title">ARE YOU SURE?</div>
+    <div class="confirm-sub" id="confirm-sub"></div>
+    <div class="confirm-btns">
+      <button class="confirm-yes danger" id="confirm-yes-btn" onclick="confirmYes()">CONFIRM</button>
+      <button class="confirm-no" onclick="confirmNo()">CANCEL</button>
+    </div>
   </div>
 </div>
 
