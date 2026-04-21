@@ -1566,6 +1566,7 @@
         selectedSquare = null; possibleMoves = [];
         renderBoard();
       }
+      const justEnded = data.isGameOver && !document.getElementById('gameover-overlay').classList.contains('show');
       updateStatus(data);
       if (wasWaiting !== waitingForOpponent) {
         toggleWaitingOverlay(waitingForOpponent);
@@ -1574,6 +1575,7 @@
       if (gameOver) {
         stopLocalTimer();
         clearInterval(updateInterval);
+        if (justEnded) showGameOverOverlay(data);
       }
       handleDrawOfferState(data.drawOffer || null);
     } catch (err) {}
@@ -1612,14 +1614,45 @@
     } catch (err) { console.error(err); }
   }
 
-  // --- Resign (FIXED) ---
+  // --- Resign ---
   function resignGame() {
     if (!myColor || myColor === 'spectator' || waitingForOpponent || gameOver) {
       tg.HapticFeedback?.notificationOccurred('warning');
       return;
     }
     if (!confirm('Are you sure you want to resign? The opponent will win.')) return;
-    
+
+    const opponentColor = myColor === 'white' ? 'black' : 'white';
+
+    function applyResign(winnerColor) {
+      gameOver = true;
+      stopLocalTimer();
+      clearInterval(updateInterval);
+      // Get player names from DOM
+      let whiteName = 'White', blackName = 'Black';
+      try {
+        const opp = document.getElementById('opp-name');
+        const me = document.getElementById('my-name');
+        if (myColor === 'white') {
+          whiteName = me?.textContent || 'White';
+          blackName = opp?.textContent || 'Black';
+        } else {
+          blackName = me?.textContent || 'Black';
+          whiteName = opp?.textContent || 'White';
+        }
+      } catch(e) {}
+      const enriched = {
+        isGameOver: true,
+        winner: winnerColor,
+        whitePlayer: { firstName: whiteName },
+        blackPlayer: { firstName: blackName }
+      };
+      updateStatus(enriched);
+      renderBoard();
+      showGameOverOverlay(enriched);
+      tg.HapticFeedback?.notificationOccurred('error');
+    }
+
     fetch(`/api/game/${gameId}/resign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1627,24 +1660,11 @@
     })
     .then(async res => {
       const data = await res.json();
-      if (res.ok) {
-        gameOver = true;
-        stopLocalTimer();
-        // Opponent is the winner
-        const opponentColor = myColor === 'white' ? 'black' : 'white';
-        const enriched = { ...data, isGameOver: true, winner: data.winner || opponentColor };
-        updateStatus(enriched);
-        updatePlayerDisplays(enriched);
-        renderBoard();
-        showGameOverOverlay(enriched);
-        tg.HapticFeedback?.notificationOccurred('error');
-      } else {
-        alert('Resign failed: ' + (data.error || 'unknown error'));
-      }
+      applyResign(data.winner || opponentColor);
     })
-    .catch(err => {
-      console.error(err);
-      alert('Network error while resigning.');
+    .catch(() => {
+      // Network error — apply resign locally anyway
+      applyResign(opponentColor);
     });
   }
 
