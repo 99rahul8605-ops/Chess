@@ -363,7 +363,8 @@
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(10, 6, 2, 0.88);
       backdrop-filter: blur(6px);
-      z-index: 9999;
+      z-index: 20;
+      border-radius: inherit;
       flex-direction: column;
       align-items: center;
       justify-content: center;
@@ -761,8 +762,10 @@
 
 <!-- Controls -->
 <div id="controls">
+  <div id="info"></div>
   <button id="draw-btn" onclick="offerDraw()">🤝 DRAW</button>
   <button id="resign-btn" onclick="resignGame()">🏳️ RESIGN</button>
+  <button onclick="newGame()">⟳ NEW GAME</button>
 </div>
 
 <!-- Stats Modal -->
@@ -1540,9 +1543,6 @@
       if (gameOver) {
         stopLocalTimer();
         clearInterval(updateInterval);
-        if (!document.getElementById('gameover-overlay').classList.contains('show')) {
-          showGameOverOverlay(data);
-        }
       }
       handleDrawOfferState(data.drawOffer || null);
     } catch (err) {}
@@ -1588,36 +1588,29 @@
       return;
     }
     if (!confirm('Are you sure you want to resign? The opponent will win.')) return;
-
-    const opponentColor = myColor === 'white' ? 'black' : 'white';
-
-    function applyResign(winnerColor) {
-      gameOver = true;
-      stopLocalTimer();
-      clearInterval(updateInterval);
-      const wName = document.getElementById('opponent-name')?.textContent || (opponentColor === 'white' ? 'White' : 'Black');
-      const mName = document.getElementById('my-name')?.textContent || (myColor === 'white' ? 'White' : 'Black');
-      const enriched = {
-        isGameOver: true, winner: winnerColor, reason: 'resign',
-        whitePlayer: { firstName: myColor === 'white' ? mName : wName },
-        blackPlayer: { firstName: myColor === 'black' ? mName : wName }
-      };
-      updateStatus(enriched);
-      renderBoard();
-      showGameOverOverlay(enriched);
-      tg.HapticFeedback?.notificationOccurred('error');
-    }
-
+    
     fetch(`/api/game/${gameId}/resign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
     })
-    .then(async res => {
-      const data = await res.json();
-      applyResign(data.winner || opponentColor);
+    .then(res => res.json())
+    .then(data => {
+      if (res.ok) {
+        gameOver = true;
+        stopLocalTimer();
+        updateStatus(data);
+        updatePlayerDisplays(data);
+        renderBoard();
+        tg.HapticFeedback?.notificationOccurred('error');
+      } else {
+        alert('Resign failed: ' + (data.error || 'unknown error'));
+      }
     })
-    .catch(() => applyResign(opponentColor));
+    .catch(err => {
+      console.error(err);
+      alert('Network error while resigning.');
+    });
   }
 
   // --- New Game ---
@@ -1705,29 +1698,16 @@
 
     const whiteName = data.whitePlayer?.firstName || 'White';
     const blackName = data.blackPlayer?.firstName || 'Black';
-    const reason = data.reason || data.gameOverReason || '';
 
     if (data.isDraw) {
-      emoji.textContent = '🤝';
-      headline.textContent = 'DRAW';
-      sub.textContent = reason === 'stalemate' ? 'Stalemate — No legal moves!' : 'Honours even — Well played!';
+      emoji.textContent = '🤝'; headline.textContent = 'DRAW'; sub.textContent = 'Honours even';
     } else if (data.winner) {
       const winName = data.winner === 'white' ? whiteName : blackName;
       const lostName = data.winner === 'white' ? blackName : whiteName;
       const iWon = myColor === data.winner;
-      if (reason === 'resign' || reason === 'resignation') {
-        emoji.textContent = iWon ? '🏆' : '🏳️';
-        headline.textContent = iWon ? 'OPPONENT RESIGNED' : 'YOU RESIGNED';
-        sub.textContent = iWon ? `${lostName} gave up — You win!` : `${winName} wins the game`;
-      } else if (reason === 'timeout' || reason === 'time') {
-        emoji.textContent = iWon ? '🏆' : '⏱️';
-        headline.textContent = "TIME'S UP!";
-        sub.textContent = iWon ? `${lostName} ran out of time` : 'Your time ran out';
-      } else {
-        emoji.textContent = iWon ? '🏆' : '💀';
-        headline.textContent = '♟️ CHECKMATE!';
-        sub.textContent = iWon ? `You checkmated ${lostName}` : `${winName} checkmated you`;
-      }
+      emoji.textContent = iWon ? '🏆' : '💀';
+      headline.textContent = iWon ? 'YOU WIN!' : 'YOU LOSE';
+      sub.textContent = `${winName} defeats ${lostName}`;
     } else {
       emoji.textContent = '🏁'; headline.textContent = 'GAME OVER'; sub.textContent = '';
     }
