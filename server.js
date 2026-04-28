@@ -229,7 +229,7 @@ function buildGameMessage(game, gameId, timeLabel) {
     statusLines = `\n⚪ ${whiteName}  ⚔️  ⚫ ${blackName}\n\n🟢 *Match in progress\\.\\.\\.*`;
     buttonText = '♟️ Spectate';
   } else if (game.pendingPlayers && game.pendingPlayers.length > 0) {
-    // One player pending — use their cached info for the real name
+    // One player pending — read their name directly from pendingPlayerInfos (not whitePlayerInfo)
     const firstPendingId = game.pendingPlayers[0];
     const firstPendingInfo = (game.pendingPlayerInfos && game.pendingPlayerInfos[firstPendingId]) || { firstName: 'Player' };
     const joinedName = escMd(firstPendingInfo.firstName || 'Player');
@@ -523,47 +523,42 @@ app.post('/api/game/:gameId/join', (req, res) => {
   }
 
   // Always cache the joining player's info so the message shows their real name
-  // even when only one player has joined so far.
   if (!game.pendingPlayerInfos) game.pendingPlayerInfos = {};
-  if (userInfo) game.pendingPlayerInfos[userId] = userInfo;
+  const resolvedInfo = userInfo || viewers.get(userId)?.userInfo;
+  if (resolvedInfo) game.pendingPlayerInfos[userId] = resolvedInfo;
 
   if (game.pendingPlayers.length >= 2) {
+    // 2nd player joined — give them the remaining color
     const [playerA, playerB] = game.pendingPlayers;
-    const whiteFirst = Math.random() < 0.5;
-    const whiteUser = whiteFirst ? playerA : playerB;
-    const blackUser = whiteFirst ? playerB : playerA;
+    const playerAColor = game.assignedPlayers.get(playerA); // already assigned on 1st join
+    const playerBColor = playerAColor === 'white' ? 'black' : 'white';
 
-    game.whiteUserId = whiteUser;
-    game.blackUserId = blackUser;
-    game.assignedPlayers.set(whiteUser, 'white');
-    game.assignedPlayers.set(blackUser, 'black');
+    game.assignedPlayers.set(playerB, playerBColor);
+    game.whiteUserId = playerAColor === 'white' ? playerA : playerB;
+    game.blackUserId = playerAColor === 'black' ? playerA : playerB;
 
-    const whiteViewer = viewers.get(whiteUser);
-    const blackViewer = viewers.get(blackUser);
-    game.whitePlayerInfo = whiteViewer?.userInfo || game.pendingPlayerInfos[whiteUser] || { firstName: 'White' };
-    game.blackPlayerInfo = blackViewer?.userInfo || game.pendingPlayerInfos[blackUser] || { firstName: 'Black' };
+    game.whitePlayerInfo = game.pendingPlayerInfos[game.whiteUserId] || { firstName: 'White' };
+    game.blackPlayerInfo = game.pendingPlayerInfos[game.blackUserId] || { firstName: 'Black' };
 
     game.pendingPlayers = [];
     game.lastMoveTimestamp = Date.now();
 
-    // Both joined — update Telegram message to show VS
     editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
 
     const color = game.assignedPlayers.get(userId);
     return res.json({ color, ...buildStateResponse(game, gameId) });
   }
 
-  // First player joined — temporarily store their info so the message shows their real name
-  const firstUserId = game.pendingPlayers[0];
-  const firstInfo = viewers.get(firstUserId)?.userInfo || game.pendingPlayerInfos[firstUserId] || { firstName: 'Player' };
-  game.whitePlayerInfo = firstInfo;  // used by buildGameMessage for the "joined — waiting" line
+  // 1st player joined — assign their color randomly right now
+  const firstColor = Math.random() < 0.5 ? 'white' : 'black';
+  game.assignedPlayers.set(userId, firstColor);
 
-  // One player joined — update the Telegram message
   editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
 
   res.json({
-    color: null,
-    waitingForAssignment: true,
+    color: firstColor,
+    waitingForAssignment: false,
+    waitingForOpponent: true,
     ...buildStateResponse(game, gameId)
   });
 });
