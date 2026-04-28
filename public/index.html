@@ -1655,7 +1655,12 @@
         const lostName = data.winner === 'white' ? (data.blackPlayer?.firstName || 'Black') : (data.whitePlayer?.firstName || 'White');
         const winIcon = data.winner === 'white' ? '⚪' : '⚫';
         headline = `${winIcon} ${winName.toUpperCase()} WINS!`;
-        sub = reasonText ? `${reasonText} — ${lostName} loses` : `${lostName} loses`;
+        if (data.reason === 'resign' && data.resignedBy) {
+          const resignedName = data.resignedBy === 'white' ? (data.whitePlayer?.firstName || 'White') : (data.blackPlayer?.firstName || 'Black');
+          sub = `${resignedName} resigned 🏳️`;
+        } else {
+          sub = reasonText ? `${reasonText} — ${lostName} loses` : `${lostName} loses`;
+        }
       } else if (data.isDraw || data.reason === 'draw' || data.reason === 'stalemate') {
         headline = data.reason === 'stalemate' ? '⚖️ STALEMATE' : '🤝 DRAW';
         sub = reasonText || 'Game ended in a draw';
@@ -1727,9 +1732,16 @@
       sub.textContent = drawReason;
     } else if (data.winner) {
       const reasonText = reasonLabels[data.reason] || '';
+      let subText;
+      if (data.reason === 'resign' && data.resignedBy) {
+        const resignedName = data.resignedBy === 'white' ? whiteName : blackName;
+        subText = `${resignedName} resigned — ${winName} wins`;
+      } else {
+        subText = `${winName} defeats ${lostName} ${reasonText}`.trim();
+      }
       emoji.textContent = iWon ? '🏆' : (iLost ? '💀' : '🏆');
       headline.textContent = iWon ? 'YOU WIN!' : (iLost ? 'YOU LOSE' : `${winName.toUpperCase()} WINS!`);
-      sub.textContent = `${winName} defeats ${lostName} ${reasonText}`.trim();
+      sub.textContent = subText;
     } else {
       emoji.textContent = '🏁';
       headline.textContent = 'GAME OVER';
