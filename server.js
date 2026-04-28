@@ -427,10 +427,21 @@ function buildStateResponse(game, gameId) {
   if (timeOutResult) {
     gameOver = true;
     winner = timeOutResult.winner;
-    draw = false;      // timeout always produces a winner, never a draw
-    stalemate = false; // clear any engine draw flags
+    draw = false;
+    stalemate = false;
   } else if (checkmate) {
     winner = turn === 'w' ? 'black' : 'white';
+  }
+
+  // Determine reason for game over
+  let reason = null;
+  if (gameOver) {
+    if (game.resignedBy) reason = 'resign';
+    else if (timeOutResult) reason = 'timeout';
+    else if (checkmate) reason = 'checkmate';
+    else if (stalemate) reason = 'stalemate';
+    else if (game.isDraw) reason = 'draw';
+    else if (draw) reason = 'draw';
   }
 
   const viewers = activeViewers.get(gameId) || new Map();
@@ -450,6 +461,7 @@ function buildStateResponse(game, gameId) {
     isDraw: draw,
     inCheck,
     winner,
+    reason,
     whiteTime: liveWhiteTime,
     blackTime: liveBlackTime,
     lastMoveTimestamp: game.lastMoveTimestamp,
@@ -655,6 +667,7 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
   }
 
   game.gameOverByTime = true;
+  game.resignedBy = playerColor;
   const winner = playerColor === 'white' ? 'black' : 'white';
   
   await recordGameResult(game, winner);
