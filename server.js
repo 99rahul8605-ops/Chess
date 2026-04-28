@@ -124,6 +124,7 @@ let BOT_USERNAME = null;
 
 async function fetchBotInfo() {
   try {
+    // Fetch bot username
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`);
     const data = await res.json();
     if (data.ok) {
@@ -132,6 +133,26 @@ async function fetchBotInfo() {
     } else {
       console.error('❌ getMe failed:', data.description);
     }
+
+    // Auto-update the menu button Web App URL from BASE_URL env
+    const webAppUrl = `${BASE_URL}/`;
+    const menuRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setChatMenuButton`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        menu_button: {
+          type: 'web_app',
+          text: '♟️ Play Chess',
+          web_app: { url: webAppUrl }
+        }
+      })
+    });
+    const menuData = await menuRes.json();
+    if (menuData.ok) {
+      console.log(`✅ Menu button URL auto-set to: ${webAppUrl}`);
+    } else {
+      console.warn('⚠️ Could not set menu button:', menuData.description);
+    }
   } catch (err) {
     console.error('❌ Could not fetch bot info:', err.message);
   }
@@ -139,17 +160,26 @@ async function fetchBotInfo() {
 
 // ========== MINI APP SHORT NAME ==========
 function extractShortName(value) {
-  if (!value) return 'game';
+  if (!value) return null;
   const trimmed = value.trim().replace(/\/$/, '');
   const parts = trimmed.split('/');
-  return parts[parts.length - 1];
+  return parts[parts.length - 1] || null;
 }
 const APP_SHORT_NAME = extractShortName(process.env.MINI_APP_SHORT_NAME);
-console.log(`🎮 Mini App short name: ${APP_SHORT_NAME}`);
+if (APP_SHORT_NAME) {
+  console.log(`🎮 Mini App short name: ${APP_SHORT_NAME}`);
+} else {
+  console.warn('⚠️  MINI_APP_SHORT_NAME is not set — Play Chess button will use BASE_URL fallback.');
+}
 
 function getMiniAppLink(gameId) {
-  if (!BOT_USERNAME) return null;
-  return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${gameId}`;
+  // Prefer the Telegram Mini App deep link when both BOT_USERNAME and APP_SHORT_NAME are available.
+  // Fall back to the plain BASE_URL web link so the button always works.
+  if (BOT_USERNAME && APP_SHORT_NAME) {
+    return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${gameId}`;
+  }
+  console.warn(`⚠️  getMiniAppLink fallback used for game ${gameId} — BOT_USERNAME=${BOT_USERNAME}, APP_SHORT_NAME=${APP_SHORT_NAME}`);
+  return getGameUrl(gameId);
 }
 
 function getGameUrl(gameId) {
@@ -209,7 +239,9 @@ function buildGameMessage(game, gameId, timeLabel) {
   }
 
   const text = `🎮 *Chess · ${timeLabelE}*\n\nGame ID: \`${gameIdE}\`\n${statusLines}\n⏱️ Time: ${timeLabelE} each\n\nTap below to play\\!`;
-  const keyboard = miniAppLink ? [[{ text: buttonText, url: miniAppLink }]] : [];
+  // miniAppLink now always returns a URL (Mini App link or BASE_URL fallback), so keyboard is always populated.
+  const buttonUrl = miniAppLink || getGameUrl(gameId);
+  const keyboard = [[{ text: buttonText, url: buttonUrl }]];
   return { text, keyboard };
 }
 
@@ -769,10 +801,7 @@ bot.on('inline_query', async (ctx) => {
   const miniAppLink5 = getMiniAppLink(gameId5);
   const miniAppLink10 = getMiniAppLink(gameId10);
   
-  if (!miniAppLink5 || !miniAppLink10) {
-    console.error('Failed to generate mini app link');
-    return await ctx.answerInlineQuery([], { cache_time: 0 });
-  }
+
 
   await ctx.answerInlineQuery([
     {
