@@ -354,18 +354,23 @@ async function recordGameResult(game, explicitWinner = null) {
   let winner = explicitWinner;
   let isDraw = false;
 
-  // Timeout always takes priority — never record a draw if time ran out
-  const timeOutResult = checkTimeOut(game);
-  if (timeOutResult) {
-    winner = timeOutResult.winner;
-  } else if (winner) {
-    // explicit winner passed in (e.g. resign), use as-is
-  } else if (game.isDraw) {
-    isDraw = true;
-  } else if (c.isCheckmate()) {
-    winner = c.turn() === 'w' ? 'black' : 'white';
-  } else if (c.isStalemate() || c.isDraw()) {
-    isDraw = true;
+  // Resign takes priority over everything
+  if (game.resignedBy) {
+    winner = game.resignedBy === 'white' ? 'black' : 'white';
+  } else {
+    // Timeout takes priority over draw
+    const timeOutResult = checkTimeOut(game);
+    if (timeOutResult) {
+      winner = timeOutResult.winner;
+    } else if (winner) {
+      // explicit winner passed in, use as-is
+    } else if (game.isDraw) {
+      isDraw = true;
+    } else if (c.isCheckmate()) {
+      winner = c.turn() === 'w' ? 'black' : 'white';
+    } else if (c.isStalemate() || c.isDraw()) {
+      isDraw = true;
+    }
   }
 
   if (winner || isDraw) {
@@ -423,12 +428,15 @@ function buildStateResponse(game, gameId) {
     gameOver = c.isGameOver() || game.gameOverByTime;
   }
 
-  const timeOutResult = checkTimeOut(game);
+  const timeOutResult = game.resignedBy ? null : checkTimeOut(game);
   if (timeOutResult) {
     gameOver = true;
     winner = timeOutResult.winner;
     draw = false;
     stalemate = false;
+  } else if (game.resignedBy) {
+    gameOver = true;
+    winner = game.resignedBy === 'white' ? 'black' : 'white';
   } else if (checkmate) {
     winner = turn === 'w' ? 'black' : 'white';
   }
@@ -673,11 +681,15 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
   
   await recordGameResult(game, winner);
   editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
-  
+
+  const state = buildStateResponse(game, gameId);
   res.json({
     success: true,
-    winner,
-    ...buildStateResponse(game, gameId)
+    ...state,
+    winner,           // ensure resign winner is never overwritten by buildStateResponse
+    reason: 'resign',
+    resignedBy: playerColor,
+    isGameOver: true,
   });
 });
 
