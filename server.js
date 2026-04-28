@@ -228,10 +228,12 @@ function buildGameMessage(game, gameId, timeLabel) {
   } else if (hasWhite && hasBlack) {
     statusLines = `\n⚪ ${whiteName}  ⚔️  ⚫ ${blackName}\n\n🟢 *Match in progress\\.\\.\\.*`;
     buttonText = '♟️ Spectate';
-  } else if (hasWhite || hasBlack) {
-    const joinedName = hasWhite ? whiteName : blackName;
-    const joinedIcon = hasWhite ? '⚪' : '⚫';
-    statusLines = `\n${joinedIcon} *${joinedName} joined* — waiting for opponent\\.\\.\\.`;
+  } else if (game.pendingPlayers && game.pendingPlayers.length > 0) {
+    // One player pending — use their cached info for the real name
+    const firstPendingId = game.pendingPlayers[0];
+    const firstPendingInfo = (game.pendingPlayerInfos && game.pendingPlayerInfos[firstPendingId]) || { firstName: 'Player' };
+    const joinedName = escMd(firstPendingInfo.firstName || 'Player');
+    statusLines = `\n⚔️ *${joinedName} joined* — waiting for opponent\\.\\.\\.`;
     buttonText = '♟️ Join & Play';
   } else {
     statusLines = '\n⚔️ First two to join play\n🎲 Colors assigned randomly';
@@ -352,16 +354,18 @@ async function recordGameResult(game, explicitWinner = null) {
   let winner = explicitWinner;
   let isDraw = false;
 
-  if (game.isDraw) { isDraw = true; }
-  if (!winner && !isDraw) {
-    const timeOutResult = checkTimeOut(game);
-    if (timeOutResult) {
-      winner = timeOutResult.winner;
-    } else if (c.isCheckmate()) {
-      winner = c.turn() === 'w' ? 'black' : 'white';
-    } else if (c.isStalemate() || c.isDraw()) {
-      isDraw = true;
-    }
+  // Timeout always takes priority — never record a draw if time ran out
+  const timeOutResult = checkTimeOut(game);
+  if (timeOutResult) {
+    winner = timeOutResult.winner;
+  } else if (winner) {
+    // explicit winner passed in (e.g. resign), use as-is
+  } else if (game.isDraw) {
+    isDraw = true;
+  } else if (c.isCheckmate()) {
+    winner = c.turn() === 'w' ? 'black' : 'white';
+  } else if (c.isStalemate() || c.isDraw()) {
+    isDraw = true;
   }
 
   if (winner || isDraw) {
@@ -408,9 +412,13 @@ function buildStateResponse(game, gameId) {
     }
     if (liveWhiteTime <= 0 && !game.gameOverByTime) {
       game.gameOverByTime = true; game.whiteTime = 0; liveWhiteTime = 0;
+      // Notify Telegram message on timeout
+      editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
     }
     if (liveBlackTime <= 0 && !game.gameOverByTime) {
       game.gameOverByTime = true; game.blackTime = 0; liveBlackTime = 0;
+      // Notify Telegram message on timeout
+      editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
     }
     gameOver = c.isGameOver() || game.gameOverByTime;
   }
@@ -419,6 +427,8 @@ function buildStateResponse(game, gameId) {
   if (timeOutResult) {
     gameOver = true;
     winner = timeOutResult.winner;
+    draw = false;      // timeout always produces a winner, never a draw
+    stalemate = false; // clear any engine draw flags
   } else if (checkmate) {
     winner = turn === 'w' ? 'black' : 'white';
   }
@@ -512,6 +522,11 @@ app.post('/api/game/:gameId/join', (req, res) => {
     game.pendingPlayers.push(userId);
   }
 
+  // Always cache the joining player's info so the message shows their real name
+  // even when only one player has joined so far.
+  if (!game.pendingPlayerInfos) game.pendingPlayerInfos = {};
+  if (userInfo) game.pendingPlayerInfos[userId] = userInfo;
+
   if (game.pendingPlayers.length >= 2) {
     const [playerA, playerB] = game.pendingPlayers;
     const whiteFirst = Math.random() < 0.5;
@@ -525,8 +540,8 @@ app.post('/api/game/:gameId/join', (req, res) => {
 
     const whiteViewer = viewers.get(whiteUser);
     const blackViewer = viewers.get(blackUser);
-    game.whitePlayerInfo = whiteViewer?.userInfo || { firstName: 'White' };
-    game.blackPlayerInfo = blackViewer?.userInfo || { firstName: 'Black' };
+    game.whitePlayerInfo = whiteViewer?.userInfo || game.pendingPlayerInfos[whiteUser] || { firstName: 'White' };
+    game.blackPlayerInfo = blackViewer?.userInfo || game.pendingPlayerInfos[blackUser] || { firstName: 'Black' };
 
     game.pendingPlayers = [];
     game.lastMoveTimestamp = Date.now();
@@ -537,6 +552,11 @@ app.post('/api/game/:gameId/join', (req, res) => {
     const color = game.assignedPlayers.get(userId);
     return res.json({ color, ...buildStateResponse(game, gameId) });
   }
+
+  // First player joined — temporarily store their info so the message shows their real name
+  const firstUserId = game.pendingPlayers[0];
+  const firstInfo = viewers.get(firstUserId)?.userInfo || game.pendingPlayerInfos[firstUserId] || { firstName: 'Player' };
+  game.whitePlayerInfo = firstInfo;  // used by buildGameMessage for the "joined — waiting" line
 
   // One player joined — update the Telegram message
   editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
