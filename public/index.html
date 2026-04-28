@@ -1295,12 +1295,16 @@
   };
 
   // Player identity click for stats
+  // Always look up the userId of whoever is visually shown in that row,
+  // regardless of whether the viewer is white, black, or a spectator.
   document.getElementById('opponent-identity').addEventListener('click', () => {
+    // opponent-row shows: black (when viewer=white), white (when viewer=black or spectator)
     const uid = (myColor === 'white') ? blackUserId : whiteUserId;
     if (uid) showStatsModal(uid, document.getElementById('opponent-name').textContent);
   });
   document.getElementById('my-identity').addEventListener('click', () => {
-    const uid = (myColor === 'white') ? whiteUserId : blackUserId;
+    // my-row shows: white (when viewer=white or spectator), black (when viewer=black)
+    const uid = (myColor === 'black') ? blackUserId : whiteUserId;
     if (uid) showStatsModal(uid, document.getElementById('my-name').textContent);
   });
 
