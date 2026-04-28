@@ -899,6 +899,7 @@
   let waitingForOpponent = true;
   let currentTurn = 'w';
   let gameOver = false;
+  let gameOverShown = false;
   let whiteUserId = null, blackUserId = null;
 
   let whiteTime = 600, blackTime = 600;
@@ -1543,6 +1544,7 @@
       if (gameOver) {
         stopLocalTimer();
         clearInterval(updateInterval);
+        if (!gameOverShown) { gameOverShown = true; showGameOverOverlay(data); }
       }
       handleDrawOfferState(data.drawOffer || null);
     } catch (err) {}
@@ -1570,7 +1572,10 @@
         renderBoard();
         updateStatus(data);
         tg.HapticFeedback.impactOccurred('light');
-        if (gameOver) stopLocalTimer();
+        if (gameOver) {
+          stopLocalTimer();
+          if (!gameOverShown) { gameOverShown = true; showGameOverOverlay(data); }
+        }
       } else {
         document.getElementById('status').textContent = `Invalid: ${data.error||'move'}`;
         setTimeout(fetchGameState, 1000);
@@ -1604,7 +1609,7 @@
       updatePlayerDisplays(data);
       renderBoard();
       updateStatus(data);
-      showGameOverOverlay(data);
+      if (!gameOverShown) { gameOverShown = true; showGameOverOverlay(data); }
       tg.HapticFeedback?.notificationOccurred('error');
     })
     .catch(err => {
@@ -1642,28 +1647,14 @@
 
     if (data.isGameOver) {
       let headline, sub;
-      const reasonLabels = {
-        checkmate: 'Checkmate',
-        timeout:   'Time out ⏰',
-        resign:    'Resignation 🏳️',
-        stalemate: 'Stalemate',
-        draw:      'Draw by agreement',
-      };
-      const reasonText = reasonLabels[data.reason] || '';
       if (data.winner) {
         const winName = data.winner === 'white' ? (data.whitePlayer?.firstName || 'White') : (data.blackPlayer?.firstName || 'Black');
-        const lostName = data.winner === 'white' ? (data.blackPlayer?.firstName || 'Black') : (data.whitePlayer?.firstName || 'White');
         const winIcon = data.winner === 'white' ? '⚪' : '⚫';
         headline = `${winIcon} ${winName.toUpperCase()} WINS!`;
-        if (data.reason === 'resign' && data.resignedBy) {
-          const resignedName = data.resignedBy === 'white' ? (data.whitePlayer?.firstName || 'White') : (data.blackPlayer?.firstName || 'Black');
-          sub = `${resignedName} resigned 🏳️`;
-        } else {
-          sub = reasonText ? `${reasonText} — ${lostName} loses` : `${lostName} loses`;
-        }
-      } else if (data.isDraw || data.reason === 'draw' || data.reason === 'stalemate') {
-        headline = data.reason === 'stalemate' ? '⚖️ STALEMATE' : '🤝 DRAW';
-        sub = reasonText || 'Game ended in a draw';
+        sub = (data.winner === myColor) ? '🏆 You won!' : (myColor ? 'Better luck next time' : `${data.winner} wins`);
+      } else if (data.isDraw) {
+        headline = '🤝 DRAW BY AGREEMENT';
+        sub = 'Honours even — well played!';
       } else {
         headline = 'GAME OVER';
         sub = '';
@@ -1717,27 +1708,21 @@
     const iWon = myColor !== 'spectator' && myColor === data.winner;
     const iLost = myColor !== 'spectator' && myColor && myColor !== data.winner;
 
-    const reasonLabels = {
-      checkmate:  'by checkmate ♟️',
-      timeout:    'on time ⏰',
-      resign:     'by resignation 🏳️',
-      stalemate:  null,
-      draw:       null,
-    };
-
     if (data.isDraw || data.reason === 'draw' || data.reason === 'stalemate') {
-      const drawReason = data.reason === 'stalemate' ? 'Stalemate' : 'Draw by agreement';
       emoji.textContent = '🤝';
-      headline.textContent = 'DRAW';
-      sub.textContent = drawReason;
+      headline.textContent = data.reason === 'stalemate' ? 'STALEMATE' : 'DRAW';
+      sub.textContent = data.reason === 'stalemate' ? 'Stalemate — no legal moves' : 'Draw by agreement';
     } else if (data.winner) {
-      const reasonText = reasonLabels[data.reason] || '';
       let subText;
       if (data.reason === 'resign' && data.resignedBy) {
         const resignedName = data.resignedBy === 'white' ? whiteName : blackName;
-        subText = `${resignedName} resigned — ${winName} wins`;
+        subText = `${resignedName} resigned 🏳️`;
+      } else if (data.reason === 'timeout') {
+        subText = `${lostName} ran out of time ⏰`;
+      } else if (data.reason === 'checkmate') {
+        subText = `${winName} wins by checkmate ♟️`;
       } else {
-        subText = `${winName} defeats ${lostName} ${reasonText}`.trim();
+        subText = `${winName} defeats ${lostName}`;
       }
       emoji.textContent = iWon ? '🏆' : (iLost ? '💀' : '🏆');
       headline.textContent = iWon ? 'YOU WIN!' : (iLost ? 'YOU LOSE' : `${winName.toUpperCase()} WINS!`);
