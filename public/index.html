@@ -1520,7 +1520,7 @@
       if (!myColor) {
         if (data.whiteUserId === userId) myColor = 'white';
         else if (data.blackUserId === userId) myColor = 'black';
-        else if (!data.waitingForAssignment && data.whiteUserId && data.blackUserId) myColor = 'spectator';
+        else if (data.whiteUserId && data.blackUserId) myColor = 'spectator';
       }
       
       const wasWaiting = waitingForOpponent;
