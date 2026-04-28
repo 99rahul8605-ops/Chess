@@ -1588,28 +1588,28 @@
       return;
     }
     if (!confirm('Are you sure you want to resign? The opponent will win.')) return;
-    
+
     fetch(`/api/game/${gameId}/resign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
     })
-    .then(res => res.json())
+    .then(res => {
+      if (!res.ok) return res.json().then(d => { throw new Error(d.error || 'Resign failed'); });
+      return res.json();
+    })
     .then(data => {
-      if (res.ok) {
-        gameOver = true;
-        stopLocalTimer();
-        updateStatus(data);
-        updatePlayerDisplays(data);
-        renderBoard();
-        tg.HapticFeedback?.notificationOccurred('error');
-      } else {
-        alert('Resign failed: ' + (data.error || 'unknown error'));
-      }
+      gameOver = true;
+      stopLocalTimer();
+      updatePlayerDisplays(data);
+      renderBoard();
+      updateStatus(data);
+      showGameOverOverlay(data);
+      tg.HapticFeedback?.notificationOccurred('error');
     })
     .catch(err => {
       console.error(err);
-      alert('Network error while resigning.');
+      alert(err.message || 'Network error while resigning.');
     });
   }
 
