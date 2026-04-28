@@ -209,6 +209,10 @@ function buildGameMessage(game, gameId, timeLabel) {
     let resultLine = '';
     if (game.isDraw) {
       resultLine = '🤝 *Result: Draw by agreement*';
+    } else if (game.resignedBy) {
+      const winner = game.resignedBy === 'white' ? blackName : whiteName;
+      const loser = game.resignedBy === 'white' ? whiteName : blackName;
+      resultLine = `🏆 *${winner} wins\\!* — ${loser} resigned 🏳️`;
     } else {
       const turn = c.turn();
       const checkmate = c.isCheckmate();
@@ -219,6 +223,8 @@ function buildGameMessage(game, gameId, timeLabel) {
       } else if (timeout) {
         const winner = game.whiteTime <= 0 ? blackName : whiteName;
         resultLine = `⏰ *${winner} wins on time\\!*`;
+      } else if (c.isStalemate()) {
+        resultLine = '⚖️ *Stalemate — draw\\!*';
       } else {
         resultLine = '🏁 *Game over*';
       }
