@@ -462,6 +462,7 @@ function buildStateResponse(game, gameId) {
     inCheck,
     winner,
     reason,
+    resignedBy: game.resignedBy || null,
     whiteTime: liveWhiteTime,
     blackTime: liveBlackTime,
     lastMoveTimestamp: game.lastMoveTimestamp,
