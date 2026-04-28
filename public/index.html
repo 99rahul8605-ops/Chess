@@ -1295,16 +1295,12 @@
   };
 
   // Player identity click for stats
-  // Always look up the userId of whoever is visually shown in that row,
-  // regardless of whether the viewer is white, black, or a spectator.
   document.getElementById('opponent-identity').addEventListener('click', () => {
-    // opponent-row shows: black (when viewer=white), white (when viewer=black or spectator)
     const uid = (myColor === 'white') ? blackUserId : whiteUserId;
     if (uid) showStatsModal(uid, document.getElementById('opponent-name').textContent);
   });
   document.getElementById('my-identity').addEventListener('click', () => {
-    // my-row shows: white (when viewer=white or spectator), black (when viewer=black)
-    const uid = (myColor === 'black') ? blackUserId : whiteUserId;
+    const uid = (myColor === 'white') ? whiteUserId : blackUserId;
     if (uid) showStatsModal(uid, document.getElementById('my-name').textContent);
   });
 
@@ -1646,14 +1642,23 @@
 
     if (data.isGameOver) {
       let headline, sub;
+      const reasonLabels = {
+        checkmate: 'Checkmate',
+        timeout:   'Time out ⏰',
+        resign:    'Resignation 🏳️',
+        stalemate: 'Stalemate',
+        draw:      'Draw by agreement',
+      };
+      const reasonText = reasonLabels[data.reason] || '';
       if (data.winner) {
         const winName = data.winner === 'white' ? (data.whitePlayer?.firstName || 'White') : (data.blackPlayer?.firstName || 'Black');
+        const lostName = data.winner === 'white' ? (data.blackPlayer?.firstName || 'Black') : (data.whitePlayer?.firstName || 'White');
         const winIcon = data.winner === 'white' ? '⚪' : '⚫';
         headline = `${winIcon} ${winName.toUpperCase()} WINS!`;
-        sub = (data.winner === myColor) ? '🏆 You won!' : (myColor ? 'Better luck next time' : `${data.winner} wins`);
-      } else if (data.isDraw) {
-        headline = '🤝 DRAW BY AGREEMENT';
-        sub = 'Honours even — well played!';
+        sub = reasonText ? `${reasonText} — ${lostName} loses` : `${lostName} loses`;
+      } else if (data.isDraw || data.reason === 'draw' || data.reason === 'stalemate') {
+        headline = data.reason === 'stalemate' ? '⚖️ STALEMATE' : '🤝 DRAW';
+        sub = reasonText || 'Game ended in a draw';
       } else {
         headline = 'GAME OVER';
         sub = '';
@@ -1702,21 +1707,37 @@
 
     const whiteName = data.whitePlayer?.firstName || 'White';
     const blackName = data.blackPlayer?.firstName || 'Black';
+    const winName = data.winner === 'white' ? whiteName : blackName;
+    const lostName = data.winner === 'white' ? blackName : whiteName;
+    const iWon = myColor !== 'spectator' && myColor === data.winner;
+    const iLost = myColor !== 'spectator' && myColor && myColor !== data.winner;
 
-    if (data.isDraw) {
-      emoji.textContent = '🤝'; headline.textContent = 'DRAW'; sub.textContent = 'Honours even';
+    const reasonLabels = {
+      checkmate:  'by checkmate ♟️',
+      timeout:    'on time ⏰',
+      resign:     'by resignation 🏳️',
+      stalemate:  null,
+      draw:       null,
+    };
+
+    if (data.isDraw || data.reason === 'draw' || data.reason === 'stalemate') {
+      const drawReason = data.reason === 'stalemate' ? 'Stalemate' : 'Draw by agreement';
+      emoji.textContent = '🤝';
+      headline.textContent = 'DRAW';
+      sub.textContent = drawReason;
     } else if (data.winner) {
-      const winName = data.winner === 'white' ? whiteName : blackName;
-      const lostName = data.winner === 'white' ? blackName : whiteName;
-      const iWon = myColor === data.winner;
-      emoji.textContent = iWon ? '🏆' : '💀';
-      headline.textContent = iWon ? 'YOU WIN!' : 'YOU LOSE';
-      sub.textContent = `${winName} defeats ${lostName}`;
+      const reasonText = reasonLabels[data.reason] || '';
+      emoji.textContent = iWon ? '🏆' : (iLost ? '💀' : '🏆');
+      headline.textContent = iWon ? 'YOU WIN!' : (iLost ? 'YOU LOSE' : `${winName.toUpperCase()} WINS!`);
+      sub.textContent = `${winName} defeats ${lostName} ${reasonText}`.trim();
     } else {
-      emoji.textContent = '🏁'; headline.textContent = 'GAME OVER'; sub.textContent = '';
+      emoji.textContent = '🏁';
+      headline.textContent = 'GAME OVER';
+      sub.textContent = '';
     }
+
     overlay.classList.add('show');
-    tg.HapticFeedback?.notificationOccurred(data.winner === myColor ? 'success' : 'error');
+    tg.HapticFeedback?.notificationOccurred(iWon ? 'success' : 'error');
   }
 
   window.closeGameOverOverlay = function() {
