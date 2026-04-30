@@ -252,7 +252,7 @@ function buildGameMessage(game, gameId, timeLabel) {
   // even in channels where chosen_inline_result may not fire.
   const keyboard = [[
     { text: buttonText, url: buttonUrl },
-    { text: '🎮', callback_data: `game:${gameId}` }
+    { text: '​', callback_data: `game:${gameId}` }
   ]];
   return { text, keyboard };
 }
@@ -892,7 +892,7 @@ bot.on('inline_query', async (ctx) => {
       reply_markup: {
         inline_keyboard: [[
           { text: '♟️ Play Chess', url: miniAppLink5 },
-          { text: '🎮', callback_data: `game:${gameId5}` }
+          { text: '​', callback_data: `game:${gameId5}` }
         ]]
       }
     },
@@ -909,7 +909,7 @@ bot.on('inline_query', async (ctx) => {
       reply_markup: {
         inline_keyboard: [[
           { text: '♟️ Play Chess', url: miniAppLink10 },
-          { text: '🎮', callback_data: `game:${gameId10}` }
+          { text: '​', callback_data: `game:${gameId10}` }
         ]]
       }
     }
