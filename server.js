@@ -247,9 +247,13 @@ function buildGameMessage(game, gameId, timeLabel) {
   }
 
   const text = `🎮 *Chess · ${timeLabelE}*\n\nGame ID: \`${gameIdE}\`\n${statusLines}\n⏱️ Time: ${timeLabelE} each\n\nTap below to play\\!`;
-  // miniAppLink now always returns a URL (Mini App link or BASE_URL fallback), so keyboard is always populated.
   const buttonUrl = miniAppLink || getGameUrl(gameId);
-  const keyboard = [[{ text: buttonText, url: buttonUrl }]];
+  // Always include a callback_data button so Telegram sends callback_query with inline_message_id
+  // even in channels where chosen_inline_result may not fire.
+  const keyboard = [[
+    { text: buttonText, url: buttonUrl },
+    { text: '🎮', callback_data: `game:${gameId}` }
+  ]];
   return { text, keyboard };
 }
 
@@ -260,7 +264,7 @@ async function editBotMessage(game, gameId, timeLabel) {
     const reply_markup = JSON.stringify({ inline_keyboard: keyboard });
 
     if (game.inlineMessageId) {
-      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+      const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -270,8 +274,28 @@ async function editBotMessage(game, gameId, timeLabel) {
           reply_markup
         })
       });
+      const data = await res.json();
+      if (!data.ok) {
+        console.warn(`⚠️ editBotMessage (inline) failed [${gameId}]: ${data.description}`);
+        // If inline edit fails, fall through to chatId/messageId if available
+        if (game.chatId && game.botMessageId) {
+          const res2 = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: game.chatId,
+              message_id: game.botMessageId,
+              text,
+              parse_mode: 'MarkdownV2',
+              reply_markup
+            })
+          });
+          const data2 = await res2.json();
+          if (!data2.ok) console.warn(`⚠️ editBotMessage (chat fallback) failed [${gameId}]: ${data2.description}`);
+        }
+      }
     } else if (game.chatId && game.botMessageId) {
-      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+      const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -282,6 +306,10 @@ async function editBotMessage(game, gameId, timeLabel) {
           reply_markup
         })
       });
+      const data = await res.json();
+      if (!data.ok) console.warn(`⚠️ editBotMessage (chat) failed [${gameId}]: ${data.description}`);
+    } else {
+      console.warn(`⚠️ editBotMessage skipped [${gameId}]: no inlineMessageId or chatId/botMessageId stored`);
     }
   } catch (err) {
     console.error('editBotMessage error:', err.message);
@@ -863,7 +891,8 @@ bot.on('inline_query', async (ctx) => {
       },
       reply_markup: {
         inline_keyboard: [[
-          { text: '♟️ Play Chess', url: miniAppLink5 }
+          { text: '♟️ Play Chess', url: miniAppLink5 },
+          { text: '🎮', callback_data: `game:${gameId5}` }
         ]]
       }
     },
@@ -879,7 +908,8 @@ bot.on('inline_query', async (ctx) => {
       },
       reply_markup: {
         inline_keyboard: [[
-          { text: '♟️ Play Chess', url: miniAppLink10 }
+          { text: '♟️ Play Chess', url: miniAppLink10 },
+          { text: '🎮', callback_data: `game:${gameId10}` }
         ]]
       }
     }
@@ -895,7 +925,26 @@ bot.on('chosen_inline_result', (ctx) => {
   const game = games.get(result_id);
   if (game && inline_message_id) {
     game.inlineMessageId = inline_message_id;
-    console.log(`📌 Saved inlineMessageId for game ${result_id}: ${inline_message_id}`);
+    console.log(`📌 Saved inlineMessageId via chosen_inline_result for game ${result_id}: ${inline_message_id}`);
+  }
+});
+
+// Fallback: capture inline_message_id from callback_query when the button is tapped
+// This works even without BotFather inline feedback enabled.
+// We use a lightweight callback button alongside the URL button for inline messages.
+bot.on('callback_query', async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const inlineMessageId = ctx.callbackQuery.inline_message_id;
+  if (data?.startsWith('game:') && inlineMessageId) {
+    const gameId = data.replace('game:', '');
+    const game = games.get(gameId);
+    if (game && !game.inlineMessageId) {
+      game.inlineMessageId = inlineMessageId;
+      console.log(`📌 Saved inlineMessageId via callback_query for game ${gameId}: ${inlineMessageId}`);
+      // Re-edit the message now that we have the ID
+      editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
+    }
+    await ctx.answerCbQuery().catch(() => {});
   }
 });
 
