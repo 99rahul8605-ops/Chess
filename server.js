@@ -451,12 +451,12 @@ function buildStateResponse(game, gameId) {
     }
     if (liveWhiteTime <= 0 && !game.gameOverByTime) {
       game.gameOverByTime = true; game.whiteTime = 0; liveWhiteTime = 0;
-      // Notify Telegram message on timeout
+      recordGameResult(game, 'black').catch(() => {}); // black wins on time
       editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
     }
     if (liveBlackTime <= 0 && !game.gameOverByTime) {
       game.gameOverByTime = true; game.blackTime = 0; liveBlackTime = 0;
-      // Notify Telegram message on timeout
+      recordGameResult(game, 'white').catch(() => {}); // white wins on time
       editBotMessage(game, gameId, getTimeLabel(game.initialTime)).catch(() => {});
     }
     gameOver = c.isGameOver() || game.gameOverByTime;
