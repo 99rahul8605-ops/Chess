@@ -928,10 +928,22 @@
          '<rect x="13" y="23" width="4" height="5" rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>'+
          '<rect x="20.5" y="23" width="4" height="5" rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>'+
          '<rect x="28" y="23" width="4" height="5" rx="1" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.8"/>',
-      N: '<rect x="9.5" y="33" width="26" height="4.5" rx="2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<path d="M22.5 5 C26 5 29 8 30 13 C31 18 29 22 26 25 L24 25 C22 23 21 20 21 17 C21 14 22 12 24 11 C21 10 18 12 17 15 C16 18 17 22 19 25 L17 25 C14 22 13 18 14 13 C15 8 18 5 22.5 5 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
-         '<path d="M20 8 C18 8 16 10 15 13 C14 16 15 19 17 21" fill="none" stroke="'+sk+'" stroke-width="1.2"/>'+
-         '<circle cx="26" cy="11" r="1.5" fill="'+f2+'"/>',
+      N: // Base bar
+         '<rect x="9.5" y="31" width="26" height="4.5" rx="2" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         // Platform
+         '<rect x="11.5" y="26" width="22" height="5.5" rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         // Horse head + neck main silhouette
+         '<path d="M 12,26 C 12,21.5 13.5,18 17,16 C 15,14 13.5,11 13.5,8.5 C 13.5,6 15.5,4 18,4.5 L 18,2.5 L 21.5,5.5 C 24,4 27,4.5 29,7 C 31,9 31.5,12 30.5,14.5 L 33.5,15.5 C 34.5,17 33.5,20.5 31.5,21.5 L 29,21.5 C 29.5,23 30.5,25 31,26 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
+         // Ear tip fill
+         '<path d="M 18,4.5 L 20.5,2 L 22,5.5" fill="'+f+'" stroke="'+sk+'" stroke-width="1" stroke-linejoin="round"/>'+
+         // Eye white
+         '<circle cx="27.5" cy="11.5" r="2.2" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.7"/>'+
+         // Eye pupil
+         '<circle cx="28" cy="11" r="0.9" fill="'+sk+'"/>'+
+         // Mane flowing line
+         '<path d="M 18,5 C 16.5,8 16,12 16.5,16.5 C 17,21 17,23.5 17,26" fill="none" stroke="'+f2+'" stroke-width="1.5" stroke-linecap="round"/>'+
+         // Nostril
+         '<ellipse cx="31" cy="17.5" rx="1.2" ry="0.9" fill="'+f2+'" stroke="'+sk+'" stroke-width="0.5"/>',
       B: '<circle cx="22.5" cy="7" r="3" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<path d="M22.5 10 C17.5 10 13.5 14.5 13.5 20.5 C13.5 24.5 15.5 27 19 28 L26 28 C29.5 27 31.5 24.5 31.5 20.5 C31.5 14.5 27.5 10 22.5 10 Z" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
          '<rect x="14" y="28" width="17" height="3" rx="1.5" fill="'+f+'" stroke="'+sk+'" stroke-width="'+sw+'"/>'+
