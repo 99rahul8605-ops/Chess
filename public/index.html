@@ -57,6 +57,9 @@
       align-items: center;
       gap: 8px;
       cursor: pointer;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .player-avatar {
@@ -82,7 +85,7 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 100px;
+      min-width: 0;
     }
 
     .player-color-badge {
@@ -111,6 +114,7 @@
       background: rgba(0,0,0,0.35);
       border-radius: 24px;
       padding: 2px 8px 2px 4px;
+      flex-shrink: 0;
     }
 
     .clock-svg-ring {
