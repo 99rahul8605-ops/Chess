@@ -285,8 +285,17 @@ function getMiniAppLink(gameId) {
 }
 
 function getGameUrl(gameId) {
-  return `${BASE_URL}/?game=${gameId}`;
+  // Use path-based URL (/join/:gameId) instead of query params.
+  // Telegram can cache the root URL and strip ?game= params when reopening a
+  // Mini App that is already open — path segments are always preserved.
+  return `${BASE_URL}/join/${gameId}`;
 }
+
+// Serve index.html for every /join/:gameId deep-link so the path survives
+// even when the HTML is loaded fresh (express static only handles /).
+app.get('/join/:gameId', (req, res) => {
+  res.sendFile('index.html', { root: 'public' });
+});
 
 // ========== BOT MESSAGE HELPERS ==========
 function escMd(str) {
