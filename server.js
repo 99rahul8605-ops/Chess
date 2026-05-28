@@ -977,9 +977,22 @@ setInterval(() => {
 const bot = new Telegraf(BOT_TOKEN);
 
 bot.on('inline_query', async (ctx) => {
+  // If BOT_USERNAME is still null (race condition on cold start), retry fetching it once
   if (!BOT_USERNAME) {
-    console.warn('Inline query received before BOT_USERNAME fetched');
-    return await ctx.answerInlineQuery([], { cache_time: 0 });
+    console.warn('⚠️ Inline query received before BOT_USERNAME fetched — retrying getMe...');
+    try {
+      const data = await tgPost('getMe', {});
+      if (data.ok) {
+        BOT_USERNAME = data.result.username;
+        console.log(`  ✅ BOT_USERNAME recovered: @${BOT_USERNAME}`);
+      }
+    } catch (err) {
+      console.error('  ❌ getMe retry failed:', err.message);
+    }
+    // If still null after retry, answer with empty so Telegram doesn't hang
+    if (!BOT_USERNAME) {
+      return await ctx.answerInlineQuery([], { cache_time: 0 });
+    }
   }
 
   const gameId5 = createNewGame(TIME_5_MIN);
@@ -1145,7 +1158,17 @@ You can also send the invitation to a group or channel. In that case, the first 
 // ========== START ==========
 app.listen(PORT, async () => {
   console.log(`✅ Server running on port ${PORT}`);
+  // Run setupBot FIRST and wait for it to complete so BOT_USERNAME is set
+  // before the bot starts receiving inline queries.
   await fetchBotInfo();
+  if (!BOT_USERNAME) {
+    // One extra attempt in case the first fetch timed out
+    console.warn('⚠️ BOT_USERNAME still null after setup — retrying getMe...');
+    try {
+      const data = await tgPost('getMe', {});
+      if (data.ok) BOT_USERNAME = data.result.username;
+    } catch (_) {}
+  }
   try {
     await bot.launch();
     console.log('✅ Bot online!');
