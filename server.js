@@ -119,44 +119,146 @@ function chessCompat(chess) {
   };
 }
 
-// ========== AUTO-FETCH BOT INFO ==========
+// ========== AUTO BOT SETUP ON DEPLOYMENT ==========
 let BOT_USERNAME = null;
 
-async function fetchBotInfo() {
+/**
+ * Telegram Bot API helper — POST request
+ */
+async function tgPost(method, body) {
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+
+/**
+ * setupBot() — called once on server start.
+ * Automatically configures everything that was previously done manually:
+ *   1. Fetch & store bot username
+ *   2. Set / clear webhook depending on USE_WEBHOOK env
+ *   3. Register bot commands (visible in Telegram command menu)
+ *   4. Set menu button → Web App URL
+ *   5. Set bot description & short description
+ */
+async function setupBot() {
+  console.log('\n🤖 ── Bot Auto-Setup Starting ──────────────────');
+
+  // ── 1. GET BOT INFO ──────────────────────────────
   try {
-    // Fetch bot username
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`);
-    const data = await res.json();
+    const data = await tgPost('getMe', {});
     if (data.ok) {
       BOT_USERNAME = data.result.username;
-      console.log(`✅ Bot username: @${BOT_USERNAME}`);
+      console.log(`  ✅ Bot username   : @${BOT_USERNAME}`);
+      console.log(`  ℹ️  Bot name       : ${data.result.first_name}`);
+      console.log(`  ℹ️  Inline queries : ${data.result.supports_inline_queries ? 'enabled' : 'disabled'}`);
     } else {
-      console.error('❌ getMe failed:', data.description);
-    }
-
-    // Auto-update the menu button Web App URL from BASE_URL env
-    const webAppUrl = `${BASE_URL}/`;
-    const menuRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setChatMenuButton`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        menu_button: {
-          type: 'web_app',
-          text: '♟️ Play Chess',
-          web_app: { url: webAppUrl }
-        }
-      })
-    });
-    const menuData = await menuRes.json();
-    if (menuData.ok) {
-      console.log(`✅ Menu button URL auto-set to: ${webAppUrl}`);
-    } else {
-      console.warn('⚠️ Could not set menu button:', menuData.description);
+      console.error('  ❌ getMe failed:', data.description);
     }
   } catch (err) {
-    console.error('❌ Could not fetch bot info:', err.message);
+    console.error('  ❌ getMe error:', err.message);
   }
+
+  // ── 2. WEBHOOK vs POLLING ────────────────────────
+  const useWebhook = process.env.USE_WEBHOOK === 'true';
+  if (useWebhook) {
+    const webhookUrl = `${BASE_URL}/bot${BOT_TOKEN}`;
+    try {
+      const data = await tgPost('setWebhook', {
+        url: webhookUrl,
+        allowed_updates: ['message', 'inline_query', 'chosen_inline_result', 'callback_query'],
+        drop_pending_updates: true
+      });
+      if (data.ok) {
+        console.log(`  ✅ Webhook set    : ${webhookUrl}`);
+      } else {
+        console.warn('  ⚠️  setWebhook failed:', data.description);
+      }
+    } catch (err) {
+      console.error('  ❌ setWebhook error:', err.message);
+    }
+  } else {
+    // Polling mode — make sure no stale webhook is blocking updates
+    try {
+      const data = await tgPost('deleteWebhook', { drop_pending_updates: false });
+      if (data.ok) {
+        console.log('  ✅ Webhook cleared (polling mode)');
+      }
+    } catch (err) {
+      console.warn('  ⚠️  deleteWebhook error:', err.message);
+    }
+  }
+
+  // ── 3. BOT COMMANDS ──────────────────────────────
+  try {
+    const commands = [
+      { command: 'start',   description: 'Start the bot & get game invite button' },
+      { command: 'newgame', description: 'Create a new chess game (use: /newgame 5 or /newgame 10)' }
+    ];
+    // Set commands for private chats
+    const privateData = await tgPost('setMyCommands', {
+      commands,
+      scope: { type: 'all_private_chats' }
+    });
+    // Set commands for group chats
+    const groupData = await tgPost('setMyCommands', {
+      commands,
+      scope: { type: 'all_group_chats' }
+    });
+    if (privateData.ok && groupData.ok) {
+      console.log(`  ✅ Commands set   : /${commands.map(c => c.command).join(', /')}`);
+    } else {
+      console.warn('  ⚠️  setMyCommands failed:', privateData.description || groupData.description);
+    }
+  } catch (err) {
+    console.error('  ❌ setMyCommands error:', err.message);
+  }
+
+  // ── 4. MENU BUTTON → WEB APP ─────────────────────
+  const webAppUrl = `${BASE_URL}/`;
+  try {
+    const data = await tgPost('setChatMenuButton', {
+      menu_button: {
+        type: 'web_app',
+        text: '♟️ Play Chess',
+        web_app: { url: webAppUrl }
+      }
+    });
+    if (data.ok) {
+      console.log(`  ✅ Menu button    : ${webAppUrl}`);
+    } else {
+      console.warn('  ⚠️  setChatMenuButton failed:', data.description);
+    }
+  } catch (err) {
+    console.error('  ❌ setChatMenuButton error:', err.message);
+  }
+
+  // ── 5. BOT DESCRIPTION ───────────────────────────
+  const description = process.env.BOT_DESCRIPTION ||
+    'Play chess directly inside Telegram! Challenge friends or anyone in a group. ' +
+    'Use /newgame to start a game, or tap the menu button to open the Chess Mini App.';
+  const shortDescription = process.env.BOT_SHORT_DESCRIPTION ||
+    'Play chess with friends inside Telegram ♟️';
+  try {
+    const [descData, shortData] = await Promise.all([
+      tgPost('setMyDescription',      { description }),
+      tgPost('setMyShortDescription', { short_description: shortDescription })
+    ]);
+    if (descData.ok)  console.log('  ✅ Description    : set');
+    else              console.warn('  ⚠️  setMyDescription failed:', descData.description);
+    if (shortData.ok) console.log('  ✅ Short desc     : set');
+    else              console.warn('  ⚠️  setMyShortDescription failed:', shortData.description);
+  } catch (err) {
+    console.error('  ❌ setMyDescription error:', err.message);
+  }
+
+  console.log('🤖 ── Bot Auto-Setup Complete ───────────────────\n');
 }
+
+// Keep backward-compatible alias so nothing else breaks
+const fetchBotInfo = setupBot;
 
 // ========== MINI APP SHORT NAME ==========
 function extractShortName(value) {
