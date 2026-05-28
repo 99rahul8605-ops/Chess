@@ -874,13 +874,16 @@
   const userInfo = getUserInfo();
 
   // --- Game ID resolution (priority order) ---
-  // 1. tg start_param  → proper deep-link (t.me/Bot/app?startapp=ID)
-  // 2. /join/:gameId   → path-based URL (avoids Telegram Mini App URL caching)
-  // 3. ?game=          → legacy query-param fallback
+  // Path wins when we're explicitly on /join/:gameId (e.g. after newGame() redirect
+  // or a direct URL open). start_param is used only when there is no path — i.e.
+  // the app was opened from inline search where Telegram injects startapp= but
+  // the URL path is just "/".
   const startParam = tg.initDataUnsafe?.start_param;
   const urlParams  = new URLSearchParams(window.location.search);
   const pathMatch  = window.location.pathname.match(/^\/join\/([a-zA-Z0-9_-]+)$/);
-  let gameId = startParam || pathMatch?.[1] || urlParams.get('game');
+  // If we are on /join/<id>, trust the path — it is always the freshest value.
+  // Only fall back to start_param when the path gives nothing (root "/" open).
+  let gameId = pathMatch?.[1] || startParam || urlParams.get('game');
 
   // When the Mini App is brought back from background with a new startapp
   // (user tapped a DIFFERENT game's inline play button), reload for new game.
@@ -1641,7 +1644,7 @@
     try {
       const res = await fetch('/api/game/new', { method: 'POST' });
       const data = await res.json();
-      window.location.href = `/join/${data.gameId}`;
+      window.location.replace(`/join/${data.gameId}`);
     } catch (err) {
       alert('Could not create new game.');
     }
