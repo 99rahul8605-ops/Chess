@@ -873,9 +873,23 @@
   }
   const userInfo = getUserInfo();
 
+  // --- Game ID resolution (priority order) ---
+  // 1. tg start_param  → proper deep-link (t.me/Bot/app?startapp=ID)
+  // 2. /join/:gameId   → path-based URL (avoids Telegram Mini App URL caching)
+  // 3. ?game=          → legacy query-param fallback
   const startParam = tg.initDataUnsafe?.start_param;
-  const urlParams = new URLSearchParams(window.location.search);
-  let gameId = startParam || urlParams.get('game');
+  const urlParams  = new URLSearchParams(window.location.search);
+  const pathMatch  = window.location.pathname.match(/^\/join\/([a-zA-Z0-9_-]+)$/);
+  let gameId = startParam || pathMatch?.[1] || urlParams.get('game');
+
+  // When the Mini App is brought back from background with a new startapp
+  // (user tapped a DIFFERENT game's inline play button), reload for new game.
+  tg.onEvent('activated', () => {
+    const freshParam = tg.initDataUnsafe?.start_param;
+    if (freshParam && freshParam !== gameId) {
+      window.location.replace(`/join/${freshParam}`);
+    }
+  });
 
   async function ensureGameId() {
     if (!gameId) {
@@ -883,9 +897,7 @@
         const res = await fetch('/api/game/new', { method: 'POST' });
         const data = await res.json();
         gameId = data.gameId;
-        const url = new URL(window.location);
-        url.searchParams.set('game', gameId);
-        window.history.replaceState({}, '', url);
+        window.history.replaceState({}, '', `/join/${gameId}`);
       } catch (e) {
         document.getElementById('board').innerHTML = '<div class="error">Could not create game.</div>';
         throw e;
@@ -1629,7 +1641,7 @@
     try {
       const res = await fetch('/api/game/new', { method: 'POST' });
       const data = await res.json();
-      window.location.href = `/?game=${data.gameId}`;
+      window.location.href = `/join/${data.gameId}`;
     } catch (err) {
       alert('Could not create new game.');
     }
