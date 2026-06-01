@@ -657,15 +657,31 @@ app.get('/api/user/:userId/stats', async (req, res) => {
     if (User) {
       const user = await User.findOne({ userId: req.params.userId });
       if (!user) {
-        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 }, profile: {} });
       }
-      return res.json({ stats: user.stats });
+      return res.json({
+        stats: user.stats,
+        profile: {
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
+          username: user.username || '',
+          photoUrl: user.photoUrl || ''
+        }
+      });
     } else {
-      const stats = memoryStats.get(req.params.userId);
-      if (!stats) {
-        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 } });
+      const entry = memoryStats.get(req.params.userId);
+      if (!entry) {
+        return res.json({ stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 }, profile: {} });
       }
-      return res.json({ stats: stats.stats });
+      return res.json({
+        stats: entry.stats,
+        profile: {
+          firstName: entry.firstName || '',
+          lastName: entry.lastName || '',
+          username: entry.username || '',
+          photoUrl: entry.photoUrl || ''
+        }
+      });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
