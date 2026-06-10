@@ -1167,16 +1167,24 @@ It's very easy to do so, click the button below or go to the chat which you want
 
 You can also send the invitation to a group or channel. In that case, the first person to click the 'Join' button will be your opponent.`;
 
+  const keyboard = [
+    [{
+      text: '📤 Send Game Invite',
+      switch_inline_query: ''
+    }]
+  ];
+
+  const supportChannel = process.env.SUPPORT_CHANNEL;
+  if (supportChannel) {
+    keyboard.push([{
+      text: '📢 Support Channel',
+      url: supportChannel
+    }]);
+  }
+
   await ctx.reply(inviteMessage, {
     parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [{
-          text: '📤 Send Game Invite',
-          switch_inline_query: ''
-        }]
-      ]
-    }
+    reply_markup: { inline_keyboard: keyboard }
   });
 });
 
