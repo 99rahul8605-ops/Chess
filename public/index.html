@@ -787,7 +787,6 @@
     <div id="go-sub"></div>
     <div class="go-divider"></div>
     <button id="go-exit-btn" onclick="closeGameOverOverlay()">✕ CLOSE</button>
-    <button id="go-new-btn" onclick="newGame()">⟳ NEW GAME</button>
   </div>
 </div>
 
@@ -822,7 +821,6 @@
   <div id="info"></div>
   <button id="draw-btn" onclick="offerDraw()">🤝 DRAW</button>
   <button id="resign-btn" onclick="resignGame()">🏳️ RESIGN</button>
-  <button onclick="newGame()">⟳ NEW GAME</button>
 </div>
 
 <!-- Stats Modal -->
@@ -908,6 +906,12 @@
   const tg = window.Telegram.WebApp;
   tg.expand();
   tg.ready();
+  // Request fullscreen if supported (Telegram Mini Apps API 8.0+)
+  if (tg.requestFullscreen) {
+    tg.requestFullscreen();
+  } else {
+    tg.expand(); // Fallback: expand to full height
+  }
 
   // --- User ID & Info ---
   const user = tg.initDataUnsafe?.user;
