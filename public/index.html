@@ -1511,31 +1511,33 @@
       if (p) onBoard[p] = (onBoard[p] || 0) + 1;
     }
 
-    const capturedByBlack = [];
-    let blackAdvantage = 0;
+    // lowercase pieces missing = black pieces captured = white captured them
+    const capturedByWhite = [];
+    let whiteAdvantage = 0;
     for (const [piece, start] of Object.entries(START_COUNTS)) {
       if (piece === 'k') continue;
       const onBoardCount = onBoard[piece] || 0;
       const missing = start - onBoardCount;
-      for (let i = 0; i < missing; i++) capturedByBlack.push(piece);
-      blackAdvantage += missing * (PIECE_VALUES[piece] || 0);
+      for (let i = 0; i < missing; i++) capturedByWhite.push(piece);
+      whiteAdvantage += missing * (PIECE_VALUES[piece] || 0);
     }
 
-    const capturedByWhite = [];
-    let whiteAdvantage = 0;
+    // uppercase pieces missing = white pieces captured = black captured them
+    const capturedByBlack = [];
+    let blackAdvantage = 0;
     for (const [piece, start] of Object.entries(START_COUNTS)) {
       if (piece === 'k') continue;
       const upper = piece.toUpperCase();
       const onBoardCount = onBoard[upper] || 0;
       const missing = start - onBoardCount;
-      for (let i = 0; i < missing; i++) capturedByWhite.push(upper);
-      whiteAdvantage += missing * (PIECE_VALUES[piece] || 0);
+      for (let i = 0; i < missing; i++) capturedByBlack.push(upper);
+      blackAdvantage += missing * (PIECE_VALUES[piece] || 0);
     }
 
-    const order = ['Q','R','B','N','P'];
+    const order = ['q','r','b','n','p'];
     capturedByWhite.sort((a,b) => order.indexOf(a) - order.indexOf(b));
-    const orderL = ['q','r','b','n','p'];
-    capturedByBlack.sort((a,b) => orderL.indexOf(a) - orderL.indexOf(b));
+    const orderU = ['Q','R','B','N','P'];
+    capturedByBlack.sort((a,b) => orderU.indexOf(a) - orderU.indexOf(b));
 
     const opponentStrip = document.getElementById('captured-by-opponent');
     const myStrip = document.getElementById('captured-by-me');
