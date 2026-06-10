@@ -300,7 +300,7 @@ function getMiniAppLink(gameId) {
   // Prefer the Telegram Mini App deep link when both BOT_USERNAME and APP_SHORT_NAME are available.
   // Fall back to the plain BASE_URL web link so the button always works.
   if (BOT_USERNAME && APP_SHORT_NAME) {
-    return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${gameId}`;
+    return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?mode=fullscreen&startapp=${gameId}`;
   }
   console.warn(`⚠️  getMiniAppLink fallback used for game ${gameId} — BOT_USERNAME=${BOT_USERNAME}, APP_SHORT_NAME=${APP_SHORT_NAME}`);
   return getGameUrl(gameId);
@@ -385,7 +385,7 @@ function buildGameMessage(game, gameId, timeLabel) {
   // even in channels where chosen_inline_result may not fire.
   const keyboard = [[
     { text: buttonText, url: buttonUrl },
-    { text: '​', callback_data: `game:${gameId}` }
+    { text: '🔄 Refresh', callback_data: `game:${gameId}` }
   ]];
   return { text, keyboard };
 }
@@ -1041,7 +1041,7 @@ bot.on('inline_query', async (ctx) => {
       reply_markup: {
         inline_keyboard: [[
           { text: '♟️ Play Chess', url: miniAppLink5 },
-          { text: '​', callback_data: `game:${gameId5}` }
+          { text: '🔄 Refresh', callback_data: `game:${gameId5}` }
         ]]
       }
     },
@@ -1058,7 +1058,7 @@ bot.on('inline_query', async (ctx) => {
       reply_markup: {
         inline_keyboard: [[
           { text: '♟️ Play Chess', url: miniAppLink10 },
-          { text: '​', callback_data: `game:${gameId10}` }
+          { text: '🔄 Refresh', callback_data: `game:${gameId10}` }
         ]]
       }
     }
