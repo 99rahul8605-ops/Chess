@@ -1542,14 +1542,19 @@
 
     let opponentCaptured, myCaptured, opponentAdv, myAdv;
     if (myColor === 'white') {
+      // White player: I captured black's pieces (capturedByWhite = black pieces missing)
+      // opponent (black) captured my pieces (capturedByBlack = white pieces missing)
+      myCaptured = capturedByWhite; opponentCaptured = capturedByBlack;
+      myAdv = whiteAdvantage; opponentAdv = blackAdvantage;
+    } else if (myColor === 'black') {
+      // Black player: I captured white's pieces (capturedByBlack = white pieces missing)
+      // opponent (white) captured my pieces (capturedByWhite = black pieces missing)
+      myCaptured = capturedByBlack; opponentCaptured = capturedByWhite;
+      myAdv = blackAdvantage; opponentAdv = whiteAdvantage;
+    } else {
+      // Spectator: top row = black, bottom row = white
       opponentCaptured = capturedByBlack; myCaptured = capturedByWhite;
       opponentAdv = blackAdvantage; myAdv = whiteAdvantage;
-    } else if (myColor === 'black') {
-      opponentCaptured = capturedByWhite; myCaptured = capturedByBlack;
-      opponentAdv = whiteAdvantage; myAdv = blackAdvantage;
-    } else {
-      opponentCaptured = capturedByWhite; myCaptured = capturedByBlack;
-      opponentAdv = whiteAdvantage; myAdv = blackAdvantage;
     }
 
     opponentStrip.innerHTML = opponentCaptured.map(p => `<span class="captured-piece">${PIECE_SYMBOLS[p]}</span>`).join('');
