@@ -19,8 +19,8 @@
 
     /* Spectator count badge */
     .spectator-badge {
-      position: absolute;
-      top: 52px;
+      position: fixed;
+      top: 80px;
       right: 16px;
       background: rgba(0,0,0,0.4);
       padding: 2px 12px;
@@ -1960,18 +1960,26 @@
       currentTurn = data.turn;
       gameOver = data.isGameOver || false;
       syncTimeFromServer(data);
-      updatePlayerDisplays(data);
+
+      // Only re-render board when FEN actually changes (prevents blink)
       const newBoard = fenToBoard(data.fen);
-      if (!boardState || JSON.stringify(boardState) !== JSON.stringify(newBoard)) {
+      const fenChanged = !boardState || JSON.stringify(boardState) !== JSON.stringify(newBoard);
+      if (fenChanged) {
         boardState = newBoard;
         lastMove = data.lastMove;
         selectedSquare = null; possibleMoves = [];
+        updatePlayerDisplays(data);
         renderBoard();
       }
+
       updateStatus(data);
+
       if (wasWaiting !== waitingForOpponent) {
         toggleWaitingOverlay(waitingForOpponent);
-        if (!waitingForOpponent) renderBoard();
+        if (!waitingForOpponent) {
+          updatePlayerDisplays(data);
+          renderBoard();
+        }
       }
       if (gameOver) {
         stopLocalTimer();
@@ -2475,7 +2483,6 @@
       return;
     }
 
-    // Get live player names from the board UI
     const myName  = document.getElementById('my-name')?.textContent?.trim()   || 'You';
     const oppName = document.getElementById('opponent-name')?.textContent?.trim() || 'Opponent';
     const myCol   = document.getElementById('my-color')?.textContent?.trim()   || '';
@@ -2492,9 +2499,18 @@
         </div>
         <div class="sb-current-meta">${escapeHtml(myCol)} vs ${escapeHtml(oppCol)}</div>
         <div class="sb-current-status">${isOver ? '🏁 Game Over' : ('🟢 ' + escapeHtml(statusTxt))}</div>
-        <button class="sb-go-btn" onclick="closeSidebar()">♟️ BACK TO GAME</button>
+        <button class="sb-go-btn" onclick="goBackToGame()">♟️ BACK TO GAME</button>
       </div>`;
   }
+
+  window.goBackToGame = function() {
+    closeSidebar();
+    // Scroll board into view smoothly
+    setTimeout(() => {
+      const board = document.getElementById('board-wrap');
+      if (board) board.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  };
 
   // ---- Play Requests ----
   let myTC = 5;
@@ -2560,6 +2576,19 @@
   async function loadSbRequests() {
     const list = document.getElementById('sb-req-list');
     if (!list) return;
+
+    // If user is already in an active game, show locked state
+    const inActiveGame = !!(gameId && !waitingForOpponent && !gameOver);
+    if (inActiveGame) {
+      const sendBox = document.querySelector('.sb-send-request');
+      if (sendBox) {
+        sendBox.style.opacity = '0.4';
+        sendBox.style.pointerEvents = 'none';
+        const lbl = sendBox.querySelector('.sb-req-label');
+        if (lbl) lbl.textContent = '⛔ Finish your current game first';
+      }
+    }
+
     try {
       const res  = await fetch('/api/play-requests');
       const data = await res.json();
@@ -2579,6 +2608,8 @@
         const avatarHtml = photo
           ? `<img src="${escapeHtml(photo)}" alt="">`
           : initial;
+        // Disable accept button if already in active game
+        const acceptDisabled = inActiveGame ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : '';
         return `
           <div class="sb-req-item">
             <div class="sb-req-avatar">${avatarHtml}</div>
@@ -2586,7 +2617,7 @@
               <div class="sb-req-name">${escapeHtml(name)}</div>
               <div class="sb-req-meta">⏱ ${r.timeControl} min · ${ageStr}</div>
             </div>
-            <button class="sb-accept-btn" onclick="acceptPlayRequest('${r.userId}',${r.timeControl})">ACCEPT</button>
+            <button class="sb-accept-btn" onclick="acceptPlayRequest('${r.userId}',${r.timeControl})" ${acceptDisabled}>ACCEPT</button>
           </div>`;
       }).join('');
     } catch(e) {
