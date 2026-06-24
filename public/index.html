@@ -2556,13 +2556,17 @@
       const res  = await fetch('/api/play-request/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acceptorId: userId, requesterId, timeControl: tc })
+        body: JSON.stringify({
+          acceptorId: userId,
+          acceptorInfo: userInfo,
+          requesterId,
+          timeControl: tc
+        })
       });
       const data = await res.json();
       if (data.gameId) {
         myRequestActive = false;
         closeSidebar();
-        // Navigate to the new game
         window.location.replace(`/join/${data.gameId}`);
       }
     } catch(e) { alert('Could not accept request. Try again.'); }
