@@ -1030,6 +1030,9 @@ app.get('/api/play-requests', (req, res) => {
   res.json({ requests: list });
 });
 
+// Map: userId -> gameId  (cleared once fetched)
+const pendingGameNotifications = new Map();
+
 // POST /api/play-request/accept — accept someone's request → create game & pre-assign both players
 app.post('/api/play-request/accept', (req, res) => {
   const { acceptorId, acceptorInfo, requesterId, timeControl } = req.body;
@@ -1062,7 +1065,6 @@ app.post('/api/play-request/accept', (req, res) => {
   game.whitePlayerInfo = game.whiteUserId === acceptorId ? aInfo : requesterInfo;
   game.blackPlayerInfo = game.blackUserId === acceptorId ? aInfo : requesterInfo;
 
-  // Init pending so join endpoint also recognises them
   game.pendingPlayerInfos = {
     [acceptorId]:  aInfo,
     [requesterId]: requesterInfo
@@ -1070,11 +1072,24 @@ app.post('/api/play-request/accept', (req, res) => {
 
   game.lastMoveTimestamp = Date.now();
 
-  // Add both to activeViewers
   activeViewers.get(gameId).set(acceptorId,  { lastSeen: Date.now(), userInfo: aInfo });
   activeViewers.get(gameId).set(requesterId, { lastSeen: Date.now(), userInfo: requesterInfo });
 
+  // Notify requester so their page auto-redirects
+  pendingGameNotifications.set(String(requesterId), gameId);
+
   res.json({ success: true, gameId, url: getGameUrl(gameId), acceptorColor, requesterColor });
+});
+
+// GET /api/game-notify/:userId — requester polls this; returns gameId once then clears
+app.get('/api/game-notify/:userId', (req, res) => {
+  const uid = String(req.params.userId);
+  const gameId = pendingGameNotifications.get(uid);
+  if (gameId) {
+    pendingGameNotifications.delete(uid); // one-shot
+    return res.json({ gameId });
+  }
+  res.json({ gameId: null });
 });
 
 // ========== PUBLIC GAMES ==========
