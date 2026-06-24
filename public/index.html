@@ -733,26 +733,25 @@
     /* ========== MENU BUTTON (top-left) ========== */
     #menu-btn {
       position: fixed;
-      top: 80px; left: 0px;
-      width: 28px; height: 80px;
-      border-radius: 0 10px 10px 0;
-      background: rgba(30,19,10,0.92);
+      top: 80px; left: 12px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: rgba(30,19,10,0.85);
       border: 1.5px solid rgba(201,168,76,0.45);
-      border-left: none;
       color: #c9a84c;
-      font-size: 0.58rem;
-      letter-spacing: 3px;
+      font-size: 1.25rem;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
       z-index: 300;
-      box-shadow: 3px 0 12px rgba(0,0,0,0.6);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.6);
       transition: transform 0.15s, background 0.2s;
       font-family: Georgia, serif;
       padding: 0;
+      writing-mode: initial;
+      letter-spacing: normal;
+      height: 40px;
     }
-    #menu-btn:active { transform: scaleX(0.9); }
+    #menu-btn:active { transform: scale(0.9); }
     #menu-btn.open { background: rgba(201,168,76,0.22); }
 
     /* ========== SIDEBAR OVERLAY ========== */
@@ -794,16 +793,24 @@
 
     /* Sidebar tabs */
     .sb-tabs {
-      display: flex; border-bottom: 1px solid rgba(201,168,76,0.15);
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid rgba(201,168,76,0.15);
     }
     .sb-tab {
-      flex: 1; padding: 8px 4px; font-size: 0.58rem; letter-spacing: 1.5px;
-      background: none; border: none; cursor: pointer;
-      color: rgba(201,168,76,0.5); font-family: Georgia, serif;
-      border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s;
+      width: 100%; padding: 12px 16px; font-size: 0.68rem; letter-spacing: 2px;
+      background: none; border: none; border-bottom: 1px solid rgba(201,168,76,0.08);
+      cursor: pointer; color: rgba(201,168,76,0.5); font-family: Georgia, serif;
+      text-align: left; transition: color 0.2s, background 0.2s;
       text-transform: uppercase;
     }
-    .sb-tab.active { color: #c9a84c; border-bottom-color: #c9a84c; }
+    .sb-tab:last-child { border-bottom: none; }
+    .sb-tab.active {
+      color: #c9a84c;
+      background: rgba(201,168,76,0.08);
+      border-left: 3px solid #c9a84c;
+      padding-left: 13px;
+    }
 
     /* Sidebar content */
     .sb-content { flex: 1; overflow-y: auto; }
@@ -955,7 +962,7 @@
 <body>
 
 <!-- ===== MENU BUTTON ===== -->
-<button id="menu-btn" onclick="toggleSidebar()" title="Menu">MENU</button>
+<button id="menu-btn" onclick="toggleSidebar()" title="Menu">☰</button>
 
 <!-- ===== SIDEBAR OVERLAY ===== -->
 <div id="sidebar-overlay" onclick="closeSidebar()"></div>
