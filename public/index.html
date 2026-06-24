@@ -861,8 +861,11 @@
     .sb-vs-sep { color: rgba(201,168,76,0.5); font-size: 0.6rem; }
     .sb-current-status {
       text-align: center; font-size: 0.6rem; letter-spacing: 2px;
-      margin-top: 8px; padding: 4px 0;
-      border-top: 1px solid rgba(201,168,76,0.1);
+      margin-top: 6px; color: rgba(201,168,76,0.7);
+    }
+    .sb-current-meta {
+      text-align: center; font-size: 0.58rem; letter-spacing: 1.5px;
+      color: rgba(255,255,255,0.4); margin-top: 4px;
     }
     .sb-go-btn {
       width: 100%; margin-top: 10px; padding: 8px;
@@ -2468,22 +2471,27 @@
   function loadSbCurrentGame() {
     const el = document.getElementById('sb-current-inner');
     if (!gameId) {
-      el.innerHTML = `<div class="sb-no-game">♟️<br><br>No active game</div>`;
+      el.innerHTML = `<div class="sb-no-game">No active game</div>`;
       return;
     }
-    const wp = document.getElementById('my-name')?.textContent    || 'You';
-    const op = document.getElementById('opponent-name')?.textContent || 'Opponent';
-    const statusEl = document.getElementById('status-line1');
-    const statusTxt = statusEl ? statusEl.textContent : '';
+
+    // Get live player names from the board UI
+    const myName  = document.getElementById('my-name')?.textContent?.trim()   || 'You';
+    const oppName = document.getElementById('opponent-name')?.textContent?.trim() || 'Opponent';
+    const myCol   = document.getElementById('my-color')?.textContent?.trim()   || '';
+    const oppCol  = document.getElementById('opponent-color')?.textContent?.trim() || '';
+    const statusTxt = document.getElementById('status-line1')?.textContent?.trim() || '';
+    const isOver  = gameOver;
 
     el.innerHTML = `
       <div class="sb-current-card">
         <div class="sb-current-vs">
-          <span class="sb-vs-name">⚪ ${escapeHtml(wp)}</span>
+          <span class="sb-vs-name">${escapeHtml(myName)}</span>
           <span class="sb-vs-sep">⚔️</span>
-          <span class="sb-vs-name">⚫ ${escapeHtml(op)}</span>
+          <span class="sb-vs-name">${escapeHtml(oppName)}</span>
         </div>
-        <div class="sb-current-status" id="sb-cur-status">${escapeHtml(statusTxt)}</div>
+        <div class="sb-current-meta">${escapeHtml(myCol)} vs ${escapeHtml(oppCol)}</div>
+        <div class="sb-current-status">${isOver ? '🏁 Game Over' : ('🟢 ' + escapeHtml(statusTxt))}</div>
         <button class="sb-go-btn" onclick="closeSidebar()">♟️ BACK TO GAME</button>
       </div>`;
   }
@@ -2617,36 +2625,18 @@
     requestPollInterval = null;
   }
 
-  // Poll to detect when OUR request was accepted by someone
+  // Poll to detect when OUR request was accepted → instant redirect
   let requesterPollInterval = null;
   function startRequesterPoll() {
     if (requesterPollInterval) return;
     requesterPollInterval = setInterval(async () => {
-      if (!myRequestActive) { stopRequesterPoll(); return; }
       try {
-        const res  = await fetch('/api/play-requests');
+        const res  = await fetch(`/api/game-notify/${userId}`);
         const data = await res.json();
-        // If our request is gone from the list, someone accepted it
-        const stillThere = (data.requests || []).some(r => r.userId === userId);
-        if (!stillThere && myRequestActive) {
-          myRequestActive = false;
+        if (data.gameId) {
           stopRequesterPoll();
-          // Find our game — check public games for one with us as player
-          const gr = await fetch('/api/public-games');
-          const gd = await gr.json();
-          const myGame = (gd.games || []).find(g =>
-            g.whitePlayer && g.blackPlayer &&
-            (String(g.whiteUserId) === String(userId) || String(g.blackUserId) === String(userId))
-          );
-          // Fallback: check all games via a new dedicated endpoint
-          if (myGame) {
-            window.location.replace(`/join/${myGame.gameId}`);
-          } else {
-            // Poll /api/my-game to get the gameId
-            const mgr = await fetch(`/api/my-active-game/${userId}`);
-            const mgd = await mgr.json();
-            if (mgd.gameId) window.location.replace(`/join/${mgd.gameId}`);
-          }
+          myRequestActive = false;
+          window.location.replace(`/join/${data.gameId}`);
         }
       } catch(e) {}
     }, 2000);
@@ -2707,6 +2697,7 @@
   (async () => {
     await ensureGameId();
     joinGame();
+    startRequesterPoll(); // always poll in background for play-request accept
   })();
 </script>
 </body>
