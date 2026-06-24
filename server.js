@@ -991,9 +991,94 @@ app.get('/api/game/:gameId/chat', (req, res) => {
   res.json({ messages: newMessages });
 });
 
-// Cleanup
+// ========== PLAY REQUESTS ==========
+// Map: userId -> { userId, userInfo, createdAt, timeControl }
+const playRequests = new Map();
+const PLAY_REQUEST_TTL = 10 * 60 * 1000; // 10 minutes
+
+// POST /api/play-request — send / refresh a play request
+app.post('/api/play-request', (req, res) => {
+  const { userId, userInfo, timeControl } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  playRequests.set(userId, {
+    userId,
+    userInfo: userInfo || { firstName: 'Anonymous' },
+    timeControl: timeControl || 10,
+    createdAt: Date.now()
+  });
+  res.json({ success: true });
+});
+
+// DELETE /api/play-request/:userId — remove own request
+app.delete('/api/play-request/:userId', (req, res) => {
+  playRequests.delete(req.params.userId);
+  res.json({ success: true });
+});
+
+// GET /api/play-requests — list active requests (excluding expired)
+app.get('/api/play-requests', (req, res) => {
+  const now = Date.now();
+  const list = [];
+  for (const [uid, req2] of playRequests.entries()) {
+    if (now - req2.createdAt < PLAY_REQUEST_TTL) {
+      list.push(req2);
+    } else {
+      playRequests.delete(uid);
+    }
+  }
+  res.json({ requests: list });
+});
+
+// POST /api/play-request/accept — accept someone's request → create game & remove both requests
+app.post('/api/play-request/accept', (req, res) => {
+  const { acceptorId, requesterId, timeControl } = req.body;
+  if (!acceptorId || !requesterId) return res.status(400).json({ error: 'acceptorId and requesterId required' });
+
+  // Remove both users' requests
+  playRequests.delete(acceptorId);
+  playRequests.delete(requesterId);
+
+  const tc = timeControl === 5 ? TIME_5_MIN : DEFAULT_TIME_SEC;
+  const gameId = createNewGame(tc);
+  res.json({ success: true, gameId, url: getGameUrl(gameId) });
+});
+
+// ========== PUBLIC GAMES ==========
+// GET /api/public-games — list all live (in-progress) games
+app.get('/api/public-games', (req, res) => {
+  const list = [];
+  for (const [gameId, game] of games.entries()) {
+    const c = chessCompat(game.chess);
+    const isLive = game.whiteUserId && game.blackUserId &&
+                   !c.isGameOver() && !game.gameOverByTime;
+    if (isLive) {
+      list.push({
+        gameId,
+        whitePlayer: game.whitePlayerInfo,
+        blackPlayer: game.blackPlayerInfo,
+        timeLabel: getTimeLabel(game.initialTime),
+        whiteTime: game.whiteTime,
+        blackTime: game.blackTime,
+        createdAt: game.createdAt,
+        moveCount: game.chess.history ? game.chess.history().length : 0
+      });
+    }
+  }
+  res.json({ games: list });
+});
+
+// ========== CLEANUP ==========
 setInterval(() => {
   const now = Date.now();
+
+  // Cleanup stale play requests
+  for (const [uid, req2] of playRequests.entries()) {
+    if (now - req2.createdAt >= PLAY_REQUEST_TTL) {
+      playRequests.delete(uid);
+    }
+  }
+
   for (const [gameId, viewers] of activeViewers.entries()) {
     for (const [userId, data] of viewers.entries()) {
       if (now - data.lastSeen > 30000) {
