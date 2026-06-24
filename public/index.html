@@ -791,26 +791,20 @@
     }
     .sb-close:hover { color: #c9a84c; }
 
-    /* Sidebar tabs */
-    .sb-tabs {
-      display: flex;
-      flex-direction: column;
-      border-bottom: 1px solid rgba(201,168,76,0.15);
+    /* Sidebar section divider labels */
+    .sb-divider-label {
+      font-size: 0.58rem; letter-spacing: 2.5px; color: rgba(201,168,76,0.5);
+      text-transform: uppercase; font-family: Georgia, serif;
+      padding: 10px 14px 6px;
+      border-top: 1px solid rgba(201,168,76,0.12);
+      display: flex; align-items: center; gap: 8px;
     }
-    .sb-tab {
-      width: 100%; padding: 12px 16px; font-size: 0.68rem; letter-spacing: 2px;
-      background: none; border: none; border-bottom: 1px solid rgba(201,168,76,0.08);
-      cursor: pointer; color: rgba(201,168,76,0.5); font-family: Georgia, serif;
-      text-align: left; transition: color 0.2s, background 0.2s;
-      text-transform: uppercase;
+    .sb-inline-refresh {
+      margin-left: auto; background: none; border: none;
+      color: rgba(201,168,76,0.5); cursor: pointer; font-size: 0.75rem;
+      padding: 0 2px; line-height: 1;
     }
-    .sb-tab:last-child { border-bottom: none; }
-    .sb-tab.active {
-      color: #c9a84c;
-      background: rgba(201,168,76,0.08);
-      border-left: 3px solid #c9a84c;
-      padding-left: 13px;
-    }
+    .sb-inline-refresh:hover { color: #c9a84c; }
 
     /* Sidebar content */
     .sb-content { flex: 1; overflow-y: auto; }
@@ -974,54 +968,47 @@
     <button class="sb-close" onclick="closeSidebar()">✕</button>
   </div>
 
-  <!-- Tabs -->
-  <div class="sb-tabs">
-    <button class="sb-tab active" onclick="switchSbTab('profile',this)">👤 Profile</button>
-    <button class="sb-tab" onclick="switchSbTab('current',this)">♟️ Game</button>
-    <button class="sb-tab" onclick="switchSbTab('requests',this)">⚔️ Request</button>
-    <button class="sb-tab" onclick="switchSbTab('public',this)">🌐 Live</button>
-  </div>
-
+  <!-- Single scrollable content -->
   <div class="sb-content">
 
     <!-- PROFILE -->
-    <div id="sb-profile" class="sb-section active">
-      <div style="padding:16px 14px;">
-        <div class="sb-profile-card">
-          <div class="sb-avatar" id="sb-my-avatar">?</div>
-          <div class="sb-user-name" id="sb-my-name">Loading...</div>
-          <div class="sb-user-handle" id="sb-my-handle"></div>
-          <div class="sb-stats-row">
-            <div class="sb-stat">
-              <div class="sb-stat-val" id="sb-stat-games">0</div>
-              <div class="sb-stat-lbl">Games</div>
-            </div>
-            <div class="sb-stat wins">
-              <div class="sb-stat-val" id="sb-stat-wins">0</div>
-              <div class="sb-stat-lbl">Wins</div>
-            </div>
-            <div class="sb-stat losses">
-              <div class="sb-stat-val" id="sb-stat-losses">0</div>
-              <div class="sb-stat-lbl">Loss</div>
-            </div>
-            <div class="sb-stat draws">
-              <div class="sb-stat-val" id="sb-stat-draws">0</div>
-              <div class="sb-stat-lbl">Draw</div>
-            </div>
+    <div style="padding:16px 14px 12px;">
+      <div class="sb-profile-card">
+        <div class="sb-avatar" id="sb-my-avatar">?</div>
+        <div class="sb-user-name" id="sb-my-name">Loading...</div>
+        <div class="sb-user-handle" id="sb-my-handle"></div>
+        <div class="sb-stats-row">
+          <div class="sb-stat">
+            <div class="sb-stat-val" id="sb-stat-games">0</div>
+            <div class="sb-stat-lbl">Games</div>
+          </div>
+          <div class="sb-stat wins">
+            <div class="sb-stat-val" id="sb-stat-wins">0</div>
+            <div class="sb-stat-lbl">Wins</div>
+          </div>
+          <div class="sb-stat losses">
+            <div class="sb-stat-val" id="sb-stat-losses">0</div>
+            <div class="sb-stat-lbl">Loss</div>
+          </div>
+          <div class="sb-stat draws">
+            <div class="sb-stat-val" id="sb-stat-draws">0</div>
+            <div class="sb-stat-lbl">Draw</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- CURRENT GAME -->
-    <div id="sb-current" class="sb-section">
+    <!-- DIVIDER: CURRENT GAME -->
+    <div class="sb-divider-label">♟️ CURRENT GAME</div>
+    <div style="padding:0 14px 12px;">
       <div id="sb-current-inner"></div>
     </div>
 
-    <!-- PLAY REQUESTS -->
-    <div id="sb-requests" class="sb-section">
+    <!-- DIVIDER: PLAY REQUESTS -->
+    <div class="sb-divider-label">⚔️ PLAY REQUESTS</div>
+    <div style="padding:0 14px 12px;">
       <div class="sb-send-request">
-        <div class="sb-req-label">Send Play Request</div>
+        <div class="sb-req-label">Challenge someone</div>
         <div class="sb-req-tc">
           <button class="sb-tc-btn selected" id="tc-5-btn" onclick="selectTC(5)">⏱ 5 min</button>
           <button class="sb-tc-btn" id="tc-10-btn" onclick="selectTC(10)">⏱ 10 min</button>
@@ -1032,9 +1019,9 @@
       <div class="sb-req-list" id="sb-req-list"></div>
     </div>
 
-    <!-- PUBLIC GAMES -->
-    <div id="sb-public" class="sb-section">
-      <button class="sb-refresh-btn" onclick="loadPublicGames()">↻ REFRESH</button>
+    <!-- DIVIDER: PUBLIC GAMES -->
+    <div class="sb-divider-label">🌐 LIVE GAMES <button class="sb-inline-refresh" onclick="loadPublicGames()">↻</button></div>
+    <div style="padding:0 14px 20px;">
       <div id="sb-public-list"></div>
     </div>
 
@@ -2398,7 +2385,12 @@
     document.getElementById('sidebar').classList.add('open');
     document.getElementById('sidebar-overlay').classList.add('open');
     document.getElementById('menu-btn').classList.add('open');
-    loadSidebarTab(currentSbTab);
+    loadSbProfile();
+    loadSbCurrentGame();
+    loadSbRequests();
+    loadPublicGames();
+    startRequestPoll();
+    startPublicPoll();
   }
 
   function closeSidebar() {
@@ -2406,31 +2398,12 @@
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebar-overlay').classList.remove('open');
     document.getElementById('menu-btn').classList.remove('open');
+    stopRequestPoll();
+    stopPublicPoll();
   }
 
   window.toggleSidebar = toggleSidebar;
   window.closeSidebar  = closeSidebar;
-
-  function switchSbTab(tab, el) {
-    currentSbTab = tab;
-    // Update tab buttons
-    document.querySelectorAll('.sb-tab').forEach(t => t.classList.remove('active'));
-    el.classList.add('active');
-    // Show section
-    document.querySelectorAll('.sb-section').forEach(s => s.classList.remove('active'));
-    document.getElementById('sb-' + tab).classList.add('active');
-    loadSidebarTab(tab);
-  }
-  window.switchSbTab = switchSbTab;
-
-  function loadSidebarTab(tab) {
-    if (tab === 'profile')  loadSbProfile();
-    if (tab === 'current')  loadSbCurrentGame();
-    if (tab === 'requests') { loadSbRequests(); startRequestPoll(); }
-    else stopRequestPoll();
-    if (tab === 'public')  { loadPublicGames(); startPublicPoll(); }
-    else stopPublicPoll();
-  }
 
   // ---- Profile ----
   async function loadSbProfile() {
