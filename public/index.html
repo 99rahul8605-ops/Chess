@@ -729,9 +729,305 @@
       padding: 0 14px; cursor: pointer; font-size: 1rem;
     }
     #chat-send:hover { background: rgba(201,168,76,0.1); }
+
+    /* ========== MENU BUTTON (top-left) ========== */
+    #menu-btn {
+      position: fixed;
+      top: 12px; left: 12px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: rgba(30,19,10,0.85);
+      border: 1.5px solid rgba(201,168,76,0.45);
+      color: #c9a84c;
+      font-size: 1.25rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 300;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+      transition: transform 0.15s, background 0.2s;
+    }
+    #menu-btn:active { transform: scale(0.9); }
+    #menu-btn.open { background: rgba(201,168,76,0.18); }
+
+    /* ========== SIDEBAR OVERLAY ========== */
+    #sidebar-overlay {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 290;
+    }
+    #sidebar-overlay.open { display: block; }
+
+    /* ========== SIDEBAR PANEL ========== */
+    #sidebar {
+      position: fixed;
+      top: 0; left: -320px; bottom: 0;
+      width: 300px;
+      background: #1a0f06;
+      border-right: 1.5px solid rgba(201,168,76,0.3);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.8);
+      z-index: 295;
+      display: flex; flex-direction: column;
+      transition: left 0.28s cubic-bezier(0.4,0,0.2,1);
+      overflow: hidden;
+    }
+    #sidebar.open { left: 0; }
+
+    /* Sidebar header */
+    .sb-header {
+      padding: 16px 14px 10px;
+      border-bottom: 1px solid rgba(201,168,76,0.15);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .sb-logo { font-size: 1rem; letter-spacing: 4px; color: #c9a84c; font-family: Georgia, serif; }
+    .sb-close {
+      background: none; border: none; cursor: pointer;
+      color: rgba(201,168,76,0.6); font-size: 1.1rem; padding: 2px 4px; line-height: 1;
+    }
+    .sb-close:hover { color: #c9a84c; }
+
+    /* Sidebar tabs */
+    .sb-tabs {
+      display: flex; border-bottom: 1px solid rgba(201,168,76,0.15);
+    }
+    .sb-tab {
+      flex: 1; padding: 8px 4px; font-size: 0.58rem; letter-spacing: 1.5px;
+      background: none; border: none; cursor: pointer;
+      color: rgba(201,168,76,0.5); font-family: Georgia, serif;
+      border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s;
+      text-transform: uppercase;
+    }
+    .sb-tab.active { color: #c9a84c; border-bottom-color: #c9a84c; }
+
+    /* Sidebar content */
+    .sb-content { flex: 1; overflow-y: auto; }
+    .sb-section { display: none; }
+    .sb-section.active { display: block; }
+
+    /* ---- Profile section ---- */
+    #sb-profile {
+      padding: 16px 14px;
+    }
+    .sb-profile-card {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(201,168,76,0.18);
+      border-radius: 14px; padding: 18px 12px;
+    }
+    .sb-avatar {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #5a3c10; border: 2.5px solid #c9a84c;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; font-weight: bold; color: #c9a84c; overflow: hidden;
+      box-shadow: 0 0 16px rgba(201,168,76,0.25);
+    }
+    .sb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .sb-user-name { font-size: 1rem; font-weight: bold; color: #fff; letter-spacing: 1px; font-family: Georgia, serif; }
+    .sb-user-handle { font-size: 0.65rem; color: rgba(201,168,76,0.6); letter-spacing: 1.5px; }
+    .sb-stats-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; margin-top: 4px;
+    }
+    .sb-stat { background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px 4px; text-align: center; }
+    .sb-stat-val { font-size: 1.2rem; font-weight: bold; color: #c9a84c; line-height: 1; }
+    .sb-stat.wins .sb-stat-val { color: #76d060; }
+    .sb-stat.losses .sb-stat-val { color: #ff7070; }
+    .sb-stat.draws .sb-stat-val { color: #88aaee; }
+    .sb-stat-lbl { font-size: 0.5rem; letter-spacing: 1px; opacity: 0.6; margin-top: 2px; text-transform: uppercase; }
+
+    /* ---- Current game section ---- */
+    #sb-current { padding: 12px 14px; }
+    .sb-current-card {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(201,168,76,0.18);
+      border-radius: 12px; padding: 14px 12px;
+    }
+    .sb-current-vs {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      font-size: 0.72rem; letter-spacing: 1.5px; color: #fff;
+    }
+    .sb-vs-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sb-vs-sep { color: rgba(201,168,76,0.5); font-size: 0.6rem; }
+    .sb-current-status {
+      text-align: center; font-size: 0.6rem; letter-spacing: 2px;
+      margin-top: 8px; padding: 4px 0;
+      border-top: 1px solid rgba(201,168,76,0.1);
+    }
+    .sb-go-btn {
+      width: 100%; margin-top: 10px; padding: 8px;
+      background: rgba(201,168,76,0.1);
+      border: 1px solid rgba(201,168,76,0.3);
+      color: #c9a84c; border-radius: 8px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 0.65rem; letter-spacing: 2px;
+      transition: background 0.2s;
+    }
+    .sb-go-btn:hover { background: rgba(201,168,76,0.22); }
+    .sb-no-game { text-align: center; color: rgba(201,168,76,0.4); font-size: 0.65rem; letter-spacing: 2px; padding: 20px 0; }
+
+    /* ---- Play Request section ---- */
+    #sb-requests { padding: 12px 14px; }
+    .sb-send-request {
+      background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.18);
+      border-radius: 12px; padding: 12px;
+    }
+    .sb-req-label { font-size: 0.6rem; letter-spacing: 2px; color: rgba(201,168,76,0.6); margin-bottom: 8px; text-transform: uppercase; }
+    .sb-req-tc { display: flex; gap: 6px; margin-bottom: 8px; }
+    .sb-tc-btn {
+      flex: 1; padding: 6px; background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(201,168,76,0.2); color: rgba(201,168,76,0.6);
+      border-radius: 6px; cursor: pointer; font-family: Georgia, serif;
+      font-size: 0.62rem; letter-spacing: 1.5px; transition: all 0.15s;
+    }
+    .sb-tc-btn.selected { background: rgba(201,168,76,0.18); border-color: #c9a84c; color: #c9a84c; }
+    .sb-send-btn {
+      width: 100%; padding: 8px; border-radius: 8px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 0.65rem; letter-spacing: 2px;
+      background: rgba(100,176,80,0.15); border: 1.5px solid #5a9050; color: #b8e6b8;
+      transition: background 0.2s;
+    }
+    .sb-send-btn:hover { background: rgba(100,176,80,0.28); }
+    .sb-send-btn.cancel { background: rgba(200,40,40,0.12); border-color: #a04040; color: #e0a0a0; }
+    .sb-send-btn.cancel:hover { background: rgba(200,40,40,0.25); }
+    .sb-req-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .sb-req-item {
+      background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.15);
+      border-radius: 10px; padding: 10px 10px 8px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .sb-req-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #5a3c10; border: 1.5px solid rgba(201,168,76,0.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; font-weight: bold; color: #c9a84c; overflow: hidden; flex-shrink: 0;
+    }
+    .sb-req-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .sb-req-info { flex: 1; min-width: 0; }
+    .sb-req-name { font-size: 0.75rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sb-req-meta { font-size: 0.58rem; color: rgba(201,168,76,0.55); letter-spacing: 1px; margin-top: 2px; }
+    .sb-accept-btn {
+      padding: 5px 10px; border-radius: 6px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 0.58rem; letter-spacing: 1.5px;
+      background: rgba(100,176,80,0.15); border: 1px solid #5a9050; color: #a5d6a5;
+      flex-shrink: 0; transition: background 0.15s;
+    }
+    .sb-accept-btn:hover { background: rgba(100,176,80,0.3); }
+    .sb-req-empty { text-align: center; color: rgba(201,168,76,0.4); font-size: 0.65rem; letter-spacing: 1.5px; padding: 14px 0; }
+    .sb-my-request-banner {
+      background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+      font-size: 0.62rem; letter-spacing: 1.5px; color: rgba(201,168,76,0.75);
+      text-align: center;
+    }
+
+    /* ---- Public games section ---- */
+    #sb-public { padding: 12px 14px; }
+    .sb-public-item {
+      background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.15);
+      border-radius: 10px; padding: 10px 10px 8px; margin-bottom: 6px; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .sb-public-item:hover { border-color: rgba(201,168,76,0.4); background: rgba(201,168,76,0.06); }
+    .sb-public-vs {
+      display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #fff;
+      margin-bottom: 5px;
+    }
+    .sb-public-name { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sb-public-meta { font-size: 0.58rem; color: rgba(201,168,76,0.55); letter-spacing: 1px; }
+    .sb-live-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: #4caf50; box-shadow: 0 0 6px #4caf50; margin-right: 4px; flex-shrink: 0;
+    }
+    .sb-public-empty { text-align: center; color: rgba(201,168,76,0.4); font-size: 0.65rem; letter-spacing: 1.5px; padding: 20px 0; }
+    .sb-refresh-btn {
+      width: 100%; padding: 6px; margin-bottom: 8px; border-radius: 6px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 0.6rem; letter-spacing: 2px;
+      background: transparent; border: 1px solid rgba(201,168,76,0.2); color: rgba(201,168,76,0.5);
+      transition: all 0.15s;
+    }
+    .sb-refresh-btn:hover { color: #c9a84c; border-color: rgba(201,168,76,0.4); }
   </style>
 </head>
 <body>
+
+<!-- ===== MENU BUTTON ===== -->
+<button id="menu-btn" onclick="toggleSidebar()" title="Menu">☰</button>
+
+<!-- ===== SIDEBAR OVERLAY ===== -->
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<!-- ===== SIDEBAR PANEL ===== -->
+<div id="sidebar">
+  <div class="sb-header">
+    <span class="sb-logo">♜ CHESS</span>
+    <button class="sb-close" onclick="closeSidebar()">✕</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="sb-tabs">
+    <button class="sb-tab active" onclick="switchSbTab('profile',this)">👤 Profile</button>
+    <button class="sb-tab" onclick="switchSbTab('current',this)">♟️ Game</button>
+    <button class="sb-tab" onclick="switchSbTab('requests',this)">⚔️ Request</button>
+    <button class="sb-tab" onclick="switchSbTab('public',this)">🌐 Live</button>
+  </div>
+
+  <div class="sb-content">
+
+    <!-- PROFILE -->
+    <div id="sb-profile" class="sb-section active">
+      <div style="padding:16px 14px;">
+        <div class="sb-profile-card">
+          <div class="sb-avatar" id="sb-my-avatar">?</div>
+          <div class="sb-user-name" id="sb-my-name">Loading...</div>
+          <div class="sb-user-handle" id="sb-my-handle"></div>
+          <div class="sb-stats-row">
+            <div class="sb-stat">
+              <div class="sb-stat-val" id="sb-stat-games">0</div>
+              <div class="sb-stat-lbl">Games</div>
+            </div>
+            <div class="sb-stat wins">
+              <div class="sb-stat-val" id="sb-stat-wins">0</div>
+              <div class="sb-stat-lbl">Wins</div>
+            </div>
+            <div class="sb-stat losses">
+              <div class="sb-stat-val" id="sb-stat-losses">0</div>
+              <div class="sb-stat-lbl">Loss</div>
+            </div>
+            <div class="sb-stat draws">
+              <div class="sb-stat-val" id="sb-stat-draws">0</div>
+              <div class="sb-stat-lbl">Draw</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CURRENT GAME -->
+    <div id="sb-current" class="sb-section">
+      <div id="sb-current-inner"></div>
+    </div>
+
+    <!-- PLAY REQUESTS -->
+    <div id="sb-requests" class="sb-section">
+      <div class="sb-send-request">
+        <div class="sb-req-label">Send Play Request</div>
+        <div class="sb-req-tc">
+          <button class="sb-tc-btn selected" id="tc-5-btn" onclick="selectTC(5)">⏱ 5 min</button>
+          <button class="sb-tc-btn" id="tc-10-btn" onclick="selectTC(10)">⏱ 10 min</button>
+        </div>
+        <button class="sb-send-btn" id="sb-send-req-btn" onclick="togglePlayRequest()">➤ SEND REQUEST</button>
+      </div>
+      <div id="sb-req-banner" class="sb-my-request-banner" style="display:none;margin-top:8px;"></div>
+      <div class="sb-req-list" id="sb-req-list"></div>
+    </div>
+
+    <!-- PUBLIC GAMES -->
+    <div id="sb-public" class="sb-section">
+      <button class="sb-refresh-btn" onclick="loadPublicGames()">↻ REFRESH</button>
+      <div id="sb-public-list"></div>
+    </div>
+
+  </div>
+</div>
+
 <h2>♜ CHESS ♞</h2>
 
 <div class="spectator-badge" id="spectator-count">
@@ -2071,6 +2367,277 @@
   window.declineDraw = declineDraw;
   window.resignGame = resignGame;
   window.newGame = newGame;
+
+  // ==================== SIDEBAR ====================
+  let sidebarOpen = false;
+  let myRequestActive = false;
+  let myRequestTC = 5;
+  let requestPollInterval = null;
+  let publicPollInterval = null;
+  let currentSbTab = 'profile';
+
+  function toggleSidebar() {
+    sidebarOpen ? closeSidebar() : openSidebar();
+  }
+
+  function openSidebar() {
+    sidebarOpen = true;
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('sidebar-overlay').classList.add('open');
+    document.getElementById('menu-btn').classList.add('open');
+    loadSidebarTab(currentSbTab);
+  }
+
+  function closeSidebar() {
+    sidebarOpen = false;
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+    document.getElementById('menu-btn').classList.remove('open');
+  }
+
+  window.toggleSidebar = toggleSidebar;
+  window.closeSidebar  = closeSidebar;
+
+  function switchSbTab(tab, el) {
+    currentSbTab = tab;
+    // Update tab buttons
+    document.querySelectorAll('.sb-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    // Show section
+    document.querySelectorAll('.sb-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sb-' + tab).classList.add('active');
+    loadSidebarTab(tab);
+  }
+  window.switchSbTab = switchSbTab;
+
+  function loadSidebarTab(tab) {
+    if (tab === 'profile')  loadSbProfile();
+    if (tab === 'current')  loadSbCurrentGame();
+    if (tab === 'requests') { loadSbRequests(); startRequestPoll(); }
+    else stopRequestPoll();
+    if (tab === 'public')  { loadPublicGames(); startPublicPoll(); }
+    else stopPublicPoll();
+  }
+
+  // ---- Profile ----
+  async function loadSbProfile() {
+    if (!userId) return;
+    const nameEl   = document.getElementById('sb-my-name');
+    const handleEl = document.getElementById('sb-my-handle');
+    const avatarEl = document.getElementById('sb-my-avatar');
+
+    // Fill basic info from Telegram user immediately
+    nameEl.textContent   = userInfo.firstName + (userInfo.lastName ? ' ' + userInfo.lastName : '');
+    handleEl.textContent = userInfo.username ? '@' + userInfo.username : '';
+    if (userInfo.photoUrl) {
+      avatarEl.innerHTML = `<img src="${userInfo.photoUrl}" alt="">`;
+    } else {
+      avatarEl.textContent = (userInfo.firstName || 'A')[0].toUpperCase();
+    }
+
+    // Fetch stats
+    try {
+      const res  = await fetch(`/api/user/${userId}/stats`);
+      const data = await res.json();
+      const s    = data.stats || {};
+      document.getElementById('sb-stat-games').textContent   = s.gamesPlayed || 0;
+      document.getElementById('sb-stat-wins').textContent    = s.wins        || 0;
+      document.getElementById('sb-stat-losses').textContent  = s.losses      || 0;
+      document.getElementById('sb-stat-draws').textContent   = s.draws       || 0;
+    } catch(e) {}
+  }
+
+  // ---- Current Game ----
+  function loadSbCurrentGame() {
+    const el = document.getElementById('sb-current-inner');
+    if (!gameId) {
+      el.innerHTML = `<div class="sb-no-game">♟️<br><br>No active game</div>`;
+      return;
+    }
+    const wp = document.getElementById('my-name')?.textContent    || 'You';
+    const op = document.getElementById('opponent-name')?.textContent || 'Opponent';
+    const statusEl = document.getElementById('status-line1');
+    const statusTxt = statusEl ? statusEl.textContent : '';
+
+    el.innerHTML = `
+      <div class="sb-current-card">
+        <div class="sb-current-vs">
+          <span class="sb-vs-name">⚪ ${escapeHtml(wp)}</span>
+          <span class="sb-vs-sep">⚔️</span>
+          <span class="sb-vs-name">⚫ ${escapeHtml(op)}</span>
+        </div>
+        <div class="sb-current-status" id="sb-cur-status">${escapeHtml(statusTxt)}</div>
+        <button class="sb-go-btn" onclick="closeSidebar()">♟️ BACK TO GAME</button>
+      </div>`;
+  }
+
+  // ---- Play Requests ----
+  let myTC = 5;
+
+  function selectTC(val) {
+    myTC = val;
+    document.getElementById('tc-5-btn').classList.toggle('selected', val === 5);
+    document.getElementById('tc-10-btn').classList.toggle('selected', val === 10);
+  }
+  window.selectTC = selectTC;
+
+  async function togglePlayRequest() {
+    if (myRequestActive) {
+      // Cancel
+      try { await fetch(`/api/play-request/${userId}`, { method: 'DELETE' }); } catch(e) {}
+      myRequestActive = false;
+      updateSendBtn();
+      document.getElementById('sb-req-banner').style.display = 'none';
+      loadSbRequests();
+      return;
+    }
+    // Send
+    try {
+      await fetch('/api/play-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo, timeControl: myTC })
+      });
+      myRequestActive = true;
+      updateSendBtn();
+      const banner = document.getElementById('sb-req-banner');
+      banner.style.display = 'block';
+      banner.textContent   = `⏳ Your request is live · ${myTC} min · waiting for opponent...`;
+      loadSbRequests();
+      // Auto-expire banner after 10 min
+      setTimeout(() => {
+        if (myRequestActive) {
+          myRequestActive = false;
+          updateSendBtn();
+          banner.style.display = 'none';
+        }
+      }, 10 * 60 * 1000);
+    } catch(e) {}
+  }
+  window.togglePlayRequest = togglePlayRequest;
+
+  function updateSendBtn() {
+    const btn = document.getElementById('sb-send-req-btn');
+    if (!btn) return;
+    if (myRequestActive) {
+      btn.textContent = '✕ CANCEL REQUEST';
+      btn.classList.add('cancel');
+    } else {
+      btn.textContent = '➤ SEND REQUEST';
+      btn.classList.remove('cancel');
+    }
+  }
+
+  async function loadSbRequests() {
+    const list = document.getElementById('sb-req-list');
+    if (!list) return;
+    try {
+      const res  = await fetch('/api/play-requests');
+      const data = await res.json();
+      const reqs = (data.requests || []).filter(r => r.userId !== userId);
+
+      if (reqs.length === 0) {
+        list.innerHTML = `<div class="sb-req-empty">No requests yet.<br>Be the first!</div>`;
+        return;
+      }
+
+      list.innerHTML = reqs.map(r => {
+        const name    = r.userInfo?.firstName || 'Player';
+        const initial = name[0].toUpperCase();
+        const photo   = r.userInfo?.photoUrl;
+        const age     = Math.floor((Date.now() - r.createdAt) / 60000);
+        const ageStr  = age < 1 ? 'just now' : `${age}m ago`;
+        const avatarHtml = photo
+          ? `<img src="${escapeHtml(photo)}" alt="">`
+          : initial;
+        return `
+          <div class="sb-req-item">
+            <div class="sb-req-avatar">${avatarHtml}</div>
+            <div class="sb-req-info">
+              <div class="sb-req-name">${escapeHtml(name)}</div>
+              <div class="sb-req-meta">⏱ ${r.timeControl} min · ${ageStr}</div>
+            </div>
+            <button class="sb-accept-btn" onclick="acceptPlayRequest('${r.userId}',${r.timeControl})">ACCEPT</button>
+          </div>`;
+      }).join('');
+    } catch(e) {
+      list.innerHTML = `<div class="sb-req-empty">Could not load requests.</div>`;
+    }
+  }
+
+  async function acceptPlayRequest(requesterId, tc) {
+    try {
+      const res  = await fetch('/api/play-request/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acceptorId: userId, requesterId, timeControl: tc })
+      });
+      const data = await res.json();
+      if (data.gameId) {
+        myRequestActive = false;
+        closeSidebar();
+        // Navigate to the new game
+        window.location.replace(`/join/${data.gameId}`);
+      }
+    } catch(e) { alert('Could not accept request. Try again.'); }
+  }
+  window.acceptPlayRequest = acceptPlayRequest;
+
+  function startRequestPoll() {
+    if (requestPollInterval) return;
+    requestPollInterval = setInterval(loadSbRequests, 4000);
+  }
+  function stopRequestPoll() {
+    clearInterval(requestPollInterval);
+    requestPollInterval = null;
+  }
+
+  // ---- Public Games ----
+  async function loadPublicGames() {
+    const list = document.getElementById('sb-public-list');
+    if (!list) return;
+    list.innerHTML = `<div class="sb-public-empty">Loading...</div>`;
+    try {
+      const res  = await fetch('/api/public-games');
+      const data = await res.json();
+      const games2 = data.games || [];
+      if (games2.length === 0) {
+        list.innerHTML = `<div class="sb-public-empty">No live games right now.<br>Start one!</div>`;
+        return;
+      }
+      list.innerHTML = games2.map(g => {
+        const wp = g.whitePlayer?.firstName || 'White';
+        const bp = g.blackPlayer?.firstName || 'Black';
+        return `
+          <div class="sb-public-item" onclick="spectateGame('${g.gameId}')">
+            <div class="sb-public-vs">
+              <span class="sb-live-dot"></span>
+              <span class="sb-public-name">⚪ ${escapeHtml(wp)}</span>
+              <span style="color:rgba(201,168,76,0.4);font-size:0.6rem">vs</span>
+              <span class="sb-public-name">⚫ ${escapeHtml(bp)}</span>
+            </div>
+            <div class="sb-public-meta">⏱ ${g.timeLabel} · ${g.moveCount} moves · 👁 TAP TO WATCH</div>
+          </div>`;
+      }).join('');
+    } catch(e) {
+      list.innerHTML = `<div class="sb-public-empty">Could not load games.</div>`;
+    }
+  }
+  window.loadPublicGames = loadPublicGames;
+
+  function spectateGame(gId) {
+    closeSidebar();
+    window.location.replace(`/join/${gId}`);
+  }
+
+  function startPublicPoll() {
+    if (publicPollInterval) return;
+    publicPollInterval = setInterval(loadPublicGames, 5000);
+  }
+  function stopPublicPoll() {
+    clearInterval(publicPollInterval);
+    publicPollInterval = null;
+  }
 
   // Start
   (async () => {
