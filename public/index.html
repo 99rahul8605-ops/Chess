@@ -805,6 +805,11 @@
       padding: 0 2px; line-height: 1;
     }
     .sb-inline-refresh:hover { color: #c9a84c; }
+    .sb-arrow {
+      margin-left: auto; font-size: 0.55rem; opacity: 0.5;
+      transition: transform 0.2s;
+    }
+    .sb-arrow.open { transform: rotate(180deg); opacity: 0.9; }
 
     /* Sidebar content */
     .sb-content { flex: 1; overflow-y: auto; }
@@ -999,30 +1004,43 @@
     </div>
 
     <!-- DIVIDER: CURRENT GAME -->
-    <div class="sb-divider-label">♟️ CURRENT GAME</div>
-    <div style="padding:0 14px 12px;">
-      <div id="sb-current-inner"></div>
+    <div class="sb-divider-label" onclick="toggleSbSection('current')" style="cursor:pointer;">
+      ♟️ CURRENT GAME <span class="sb-arrow" id="arrow-current">▼</span>
+    </div>
+    <div class="sb-collapsible" id="sec-current" style="display:none;">
+      <div style="padding:0 14px 12px;">
+        <div id="sb-current-inner"></div>
+      </div>
     </div>
 
     <!-- DIVIDER: PLAY REQUESTS -->
-    <div class="sb-divider-label">⚔️ PLAY REQUESTS</div>
-    <div style="padding:0 14px 12px;">
-      <div class="sb-send-request">
-        <div class="sb-req-label">Challenge someone</div>
-        <div class="sb-req-tc">
-          <button class="sb-tc-btn selected" id="tc-5-btn" onclick="selectTC(5)">⏱ 5 min</button>
-          <button class="sb-tc-btn" id="tc-10-btn" onclick="selectTC(10)">⏱ 10 min</button>
+    <div class="sb-divider-label" onclick="toggleSbSection('requests')" style="cursor:pointer;">
+      ⚔️ PLAY REQUESTS <span class="sb-arrow" id="arrow-requests">▼</span>
+    </div>
+    <div class="sb-collapsible" id="sec-requests" style="display:none;">
+      <div style="padding:0 14px 12px;">
+        <div class="sb-send-request">
+          <div class="sb-req-label">Challenge someone</div>
+          <div class="sb-req-tc">
+            <button class="sb-tc-btn selected" id="tc-5-btn" onclick="selectTC(5)">⏱ 5 min</button>
+            <button class="sb-tc-btn" id="tc-10-btn" onclick="selectTC(10)">⏱ 10 min</button>
+          </div>
+          <button class="sb-send-btn" id="sb-send-req-btn" onclick="togglePlayRequest()">➤ SEND REQUEST</button>
         </div>
-        <button class="sb-send-btn" id="sb-send-req-btn" onclick="togglePlayRequest()">➤ SEND REQUEST</button>
+        <div id="sb-req-banner" class="sb-my-request-banner" style="display:none;margin-top:8px;"></div>
+        <div class="sb-req-list" id="sb-req-list"></div>
       </div>
-      <div id="sb-req-banner" class="sb-my-request-banner" style="display:none;margin-top:8px;"></div>
-      <div class="sb-req-list" id="sb-req-list"></div>
     </div>
 
     <!-- DIVIDER: PUBLIC GAMES -->
-    <div class="sb-divider-label">🌐 LIVE GAMES <button class="sb-inline-refresh" onclick="loadPublicGames()">↻</button></div>
-    <div style="padding:0 14px 20px;">
-      <div id="sb-public-list"></div>
+    <div class="sb-divider-label" onclick="toggleSbSection('public')" style="cursor:pointer;">
+      🌐 LIVE GAMES <span class="sb-arrow" id="arrow-public">▼</span>
+      <button class="sb-inline-refresh" onclick="event.stopPropagation();loadPublicGames()">↻</button>
+    </div>
+    <div class="sb-collapsible" id="sec-public" style="display:none;">
+      <div style="padding:0 14px 20px;">
+        <div id="sb-public-list"></div>
+      </div>
     </div>
 
   </div>
@@ -2387,10 +2405,6 @@
     document.getElementById('menu-btn').classList.add('open');
     loadSbProfile();
     loadSbCurrentGame();
-    loadSbRequests();
-    loadPublicGames();
-    startRequestPoll();
-    startPublicPoll();
   }
 
   function closeSidebar() {
@@ -2402,8 +2416,25 @@
     stopPublicPoll();
   }
 
-  window.toggleSidebar = toggleSidebar;
-  window.closeSidebar  = closeSidebar;
+  function toggleSbSection(name) {
+    const sec   = document.getElementById('sec-' + name);
+    const arrow = document.getElementById('arrow-' + name);
+    const isOpen = sec.style.display !== 'none';
+    sec.style.display = isOpen ? 'none' : 'block';
+    arrow.classList.toggle('open', !isOpen);
+    if (!isOpen) {
+      if (name === 'requests') { loadSbRequests(); startRequestPoll(); }
+      if (name === 'public')   { loadPublicGames(); startPublicPoll(); }
+      if (name === 'current')  { loadSbCurrentGame(); }
+    } else {
+      if (name === 'requests') stopRequestPoll();
+      if (name === 'public')   stopPublicPoll();
+    }
+  }
+
+  window.toggleSidebar   = toggleSidebar;
+  window.closeSidebar    = closeSidebar;
+  window.toggleSbSection = toggleSbSection;
 
   // ---- Profile ----
   async function loadSbProfile() {
@@ -2473,6 +2504,7 @@
       try { await fetch(`/api/play-request/${userId}`, { method: 'DELETE' }); } catch(e) {}
       myRequestActive = false;
       updateSendBtn();
+      stopRequesterPoll();
       document.getElementById('sb-req-banner').style.display = 'none';
       loadSbRequests();
       return;
@@ -2490,12 +2522,15 @@
       banner.style.display = 'block';
       banner.textContent   = `⏳ Your request is live · ${myTC} min · waiting for opponent...`;
       loadSbRequests();
-      // Auto-expire banner after 10 min
+      // Poll to detect when someone accepts our request → game starts
+      startRequesterPoll();
+      // Auto-expire after 10 min
       setTimeout(() => {
         if (myRequestActive) {
           myRequestActive = false;
           updateSendBtn();
-          banner.style.display = 'none';
+          stopRequesterPoll();
+          if (banner) banner.style.display = 'none';
         }
       }, 10 * 60 * 1000);
     } catch(e) {}
@@ -2580,6 +2615,45 @@
   function stopRequestPoll() {
     clearInterval(requestPollInterval);
     requestPollInterval = null;
+  }
+
+  // Poll to detect when OUR request was accepted by someone
+  let requesterPollInterval = null;
+  function startRequesterPoll() {
+    if (requesterPollInterval) return;
+    requesterPollInterval = setInterval(async () => {
+      if (!myRequestActive) { stopRequesterPoll(); return; }
+      try {
+        const res  = await fetch('/api/play-requests');
+        const data = await res.json();
+        // If our request is gone from the list, someone accepted it
+        const stillThere = (data.requests || []).some(r => r.userId === userId);
+        if (!stillThere && myRequestActive) {
+          myRequestActive = false;
+          stopRequesterPoll();
+          // Find our game — check public games for one with us as player
+          const gr = await fetch('/api/public-games');
+          const gd = await gr.json();
+          const myGame = (gd.games || []).find(g =>
+            g.whitePlayer && g.blackPlayer &&
+            (String(g.whiteUserId) === String(userId) || String(g.blackUserId) === String(userId))
+          );
+          // Fallback: check all games via a new dedicated endpoint
+          if (myGame) {
+            window.location.replace(`/join/${myGame.gameId}`);
+          } else {
+            // Poll /api/my-game to get the gameId
+            const mgr = await fetch(`/api/my-active-game/${userId}`);
+            const mgd = await mgr.json();
+            if (mgd.gameId) window.location.replace(`/join/${mgd.gameId}`);
+          }
+        }
+      } catch(e) {}
+    }, 2000);
+  }
+  function stopRequesterPoll() {
+    clearInterval(requesterPollInterval);
+    requesterPollInterval = null;
   }
 
   // ---- Public Games ----
