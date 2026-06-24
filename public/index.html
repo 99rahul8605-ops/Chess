@@ -733,21 +733,27 @@
     /* ========== MENU BUTTON (top-left) ========== */
     #menu-btn {
       position: fixed;
-      top: 52px; left: 12px;
-      width: 40px; height: 40px;
-      border-radius: 50%;
-      background: rgba(30,19,10,0.85);
+      top: 80px; left: 0px;
+      width: 28px; height: 80px;
+      border-radius: 0 10px 10px 0;
+      background: rgba(30,19,10,0.92);
       border: 1.5px solid rgba(201,168,76,0.45);
+      border-left: none;
       color: #c9a84c;
-      font-size: 1.25rem;
+      font-size: 0.58rem;
+      letter-spacing: 3px;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
       z-index: 300;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+      box-shadow: 3px 0 12px rgba(0,0,0,0.6);
       transition: transform 0.15s, background 0.2s;
+      font-family: Georgia, serif;
+      padding: 0;
     }
-    #menu-btn:active { transform: scale(0.9); }
-    #menu-btn.open { background: rgba(201,168,76,0.18); }
+    #menu-btn:active { transform: scaleX(0.9); }
+    #menu-btn.open { background: rgba(201,168,76,0.22); }
 
     /* ========== SIDEBAR OVERLAY ========== */
     #sidebar-overlay {
@@ -949,7 +955,7 @@
 <body>
 
 <!-- ===== MENU BUTTON ===== -->
-<button id="menu-btn" onclick="toggleSidebar()" title="Menu">☰</button>
+<button id="menu-btn" onclick="toggleSidebar()" title="Menu">MENU</button>
 
 <!-- ===== SIDEBAR OVERLAY ===== -->
 <div id="sidebar-overlay" onclick="closeSidebar()"></div>
