@@ -1030,18 +1030,51 @@ app.get('/api/play-requests', (req, res) => {
   res.json({ requests: list });
 });
 
-// POST /api/play-request/accept — accept someone's request → create game & remove both requests
+// POST /api/play-request/accept — accept someone's request → create game & pre-assign both players
 app.post('/api/play-request/accept', (req, res) => {
-  const { acceptorId, requesterId, timeControl } = req.body;
+  const { acceptorId, acceptorInfo, requesterId, timeControl } = req.body;
   if (!acceptorId || !requesterId) return res.status(400).json({ error: 'acceptorId and requesterId required' });
+
+  // Grab requester's userInfo from stored request
+  const requesterReq = playRequests.get(requesterId);
+  const requesterInfo = requesterReq?.userInfo || { firstName: 'Player' };
 
   // Remove both users' requests
   playRequests.delete(acceptorId);
   playRequests.delete(requesterId);
 
-  const tc = timeControl === 5 ? TIME_5_MIN : DEFAULT_TIME_SEC;
+  const tc = (timeControl === 5 || timeControl === '5') ? TIME_5_MIN : DEFAULT_TIME_SEC;
   const gameId = createNewGame(tc);
-  res.json({ success: true, gameId, url: getGameUrl(gameId) });
+  const game = games.get(gameId);
+
+  // Randomly assign colors
+  const acceptorColor = Math.random() < 0.5 ? 'white' : 'black';
+  const requesterColor = acceptorColor === 'white' ? 'black' : 'white';
+
+  // Assign both players
+  game.assignedPlayers.set(acceptorId, acceptorColor);
+  game.assignedPlayers.set(requesterId, requesterColor);
+
+  game.whiteUserId  = acceptorColor === 'white' ? acceptorId  : requesterId;
+  game.blackUserId  = acceptorColor === 'black' ? acceptorId  : requesterId;
+
+  const aInfo = acceptorInfo || { firstName: 'Player' };
+  game.whitePlayerInfo = game.whiteUserId === acceptorId ? aInfo : requesterInfo;
+  game.blackPlayerInfo = game.blackUserId === acceptorId ? aInfo : requesterInfo;
+
+  // Init pending so join endpoint also recognises them
+  game.pendingPlayerInfos = {
+    [acceptorId]:  aInfo,
+    [requesterId]: requesterInfo
+  };
+
+  game.lastMoveTimestamp = Date.now();
+
+  // Add both to activeViewers
+  activeViewers.get(gameId).set(acceptorId,  { lastSeen: Date.now(), userInfo: aInfo });
+  activeViewers.get(gameId).set(requesterId, { lastSeen: Date.now(), userInfo: requesterInfo });
+
+  res.json({ success: true, gameId, url: getGameUrl(gameId), acceptorColor, requesterColor });
 });
 
 // ========== PUBLIC GAMES ==========
