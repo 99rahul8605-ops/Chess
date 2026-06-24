@@ -1078,6 +1078,20 @@ app.post('/api/play-request/accept', (req, res) => {
 });
 
 // ========== PUBLIC GAMES ==========
+// GET /api/my-active-game/:userId — find live game where this user is a player
+app.get('/api/my-active-game/:userId', (req, res) => {
+  const uid = req.params.userId;
+  for (const [gameId, game] of games.entries()) {
+    const c = chessCompat(game.chess);
+    const isPlayer = game.whiteUserId === uid || game.blackUserId === uid;
+    const isLive   = game.whiteUserId && game.blackUserId && !c.isGameOver() && !game.gameOverByTime;
+    if (isPlayer && isLive) {
+      return res.json({ gameId, url: getGameUrl(gameId) });
+    }
+  }
+  res.json({ gameId: null });
+});
+
 // GET /api/public-games — list all live (in-progress) games
 app.get('/api/public-games', (req, res) => {
   const list = [];
@@ -1090,6 +1104,8 @@ app.get('/api/public-games', (req, res) => {
         gameId,
         whitePlayer: game.whitePlayerInfo,
         blackPlayer: game.blackPlayerInfo,
+        whiteUserId: game.whiteUserId,
+        blackUserId: game.blackUserId,
         timeLabel: getTimeLabel(game.initialTime),
         whiteTime: game.whiteTime,
         blackTime: game.blackTime,
