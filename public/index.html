@@ -734,12 +734,12 @@
     #menu-btn {
       position: fixed;
       top: 80px; left: 12px;
-      width: 40px; height: 40px;
+      width: 54px; height: 54px;
       border-radius: 50%;
       background: rgba(30,19,10,0.85);
       border: 1.5px solid rgba(201,168,76,0.45);
       color: #c9a84c;
-      font-size: 1.25rem;
+      font-size: 1.65rem;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       z-index: 300;
@@ -749,7 +749,7 @@
       padding: 0;
       writing-mode: initial;
       letter-spacing: normal;
-      height: 40px;
+      height: 54px;
     }
     #menu-btn:active { transform: scale(0.9); }
     #menu-btn.open { background: rgba(201,168,76,0.22); }
@@ -2714,6 +2714,7 @@
     closeSidebar();
     window.location.replace(`/join/${gId}`);
   }
+  window.spectateGame = spectateGame;
 
   function startPublicPoll() {
     if (publicPollInterval) return;
