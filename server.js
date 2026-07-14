@@ -1132,6 +1132,99 @@ app.get('/api/public-games', (req, res) => {
   res.json({ games: list });
 });
 
+// ========== QUICK MATCHMAKING ==========
+const matchQueue = new Map();      // userId -> { userId, userInfo, timeControl, joinedAt }
+const matchResults = new Map();    // userId -> gameId (one-shot notification for the player who was already waiting)
+const MATCH_QUEUE_TTL = 2 * 60 * 1000; // 2 minutes
+
+// POST /api/matchmaking/join — join the quick-match queue, or get paired instantly if someone's already waiting
+app.post('/api/matchmaking/join', (req, res) => {
+  const { userId, userInfo, timeControl } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const uid = String(userId);
+
+  // Already matched from a previous call (e.g. duplicate click)?
+  if (matchResults.has(uid)) {
+    const gameId = matchResults.get(uid);
+    matchResults.delete(uid);
+    return res.json({ gameId });
+  }
+
+  // Clean expired queue entries first
+  const now = Date.now();
+  for (const [qid, entry] of matchQueue.entries()) {
+    if (now - entry.joinedAt >= MATCH_QUEUE_TTL) matchQueue.delete(qid);
+  }
+
+  // Look for someone else already waiting
+  let opponent = null;
+  for (const [qid, entry] of matchQueue.entries()) {
+    if (qid !== uid) { opponent = entry; break; }
+  }
+
+  if (opponent) {
+    matchQueue.delete(opponent.userId);
+    matchQueue.delete(uid);
+
+    const tc = (opponent.timeControl === 5 || timeControl === 5) ? TIME_5_MIN : DEFAULT_TIME_SEC;
+    const gameId = createNewGame(tc);
+    const game = games.get(gameId);
+
+    const joinerColor   = Math.random() < 0.5 ? 'white' : 'black';
+    const opponentColor = joinerColor === 'white' ? 'black' : 'white';
+
+    game.assignedPlayers.set(uid, joinerColor);
+    game.assignedPlayers.set(opponent.userId, opponentColor);
+
+    game.whiteUserId = joinerColor === 'white' ? uid : opponent.userId;
+    game.blackUserId = joinerColor === 'black' ? uid : opponent.userId;
+
+    const myInfo = userInfo || { firstName: 'Player' };
+    game.whitePlayerInfo = game.whiteUserId === uid ? myInfo : opponent.userInfo;
+    game.blackPlayerInfo = game.blackUserId === uid ? myInfo : opponent.userInfo;
+
+    game.pendingPlayerInfos = {
+      [uid]: myInfo,
+      [opponent.userId]: opponent.userInfo
+    };
+    game.lastMoveTimestamp = Date.now();
+
+    activeViewers.get(gameId).set(uid, { lastSeen: now, userInfo: myInfo });
+    activeViewers.get(gameId).set(opponent.userId, { lastSeen: now, userInfo: opponent.userInfo });
+
+    // Notify the other player (who's polling status) so their page redirects too
+    matchResults.set(opponent.userId, gameId);
+
+    return res.json({ gameId });
+  }
+
+  // No one waiting — join the queue ourselves
+  matchQueue.set(uid, {
+    userId: uid,
+    userInfo: userInfo || { firstName: 'Anonymous' },
+    timeControl: timeControl || 10,
+    joinedAt: now
+  });
+  res.json({ waiting: true });
+});
+
+// GET /api/matchmaking/status/:userId — poll while waiting; returns gameId once matched
+app.get('/api/matchmaking/status/:userId', (req, res) => {
+  const uid = String(req.params.userId);
+  if (matchResults.has(uid)) {
+    const gameId = matchResults.get(uid);
+    matchResults.delete(uid);
+    return res.json({ gameId });
+  }
+  res.json({ gameId: null, waiting: matchQueue.has(uid) });
+});
+
+// DELETE /api/matchmaking/:userId — cancel search
+app.delete('/api/matchmaking/:userId', (req, res) => {
+  matchQueue.delete(String(req.params.userId));
+  res.json({ success: true });
+});
+
 // ========== CLEANUP ==========
 setInterval(() => {
   const now = Date.now();
@@ -1140,6 +1233,13 @@ setInterval(() => {
   for (const [uid, req2] of playRequests.entries()) {
     if (now - req2.createdAt >= PLAY_REQUEST_TTL) {
       playRequests.delete(uid);
+    }
+  }
+
+  // Cleanup stale matchmaking queue entries
+  for (const [uid, entry] of matchQueue.entries()) {
+    if (now - entry.joinedAt >= MATCH_QUEUE_TTL) {
+      matchQueue.delete(uid);
     }
   }
 
