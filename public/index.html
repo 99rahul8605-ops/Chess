@@ -959,6 +959,66 @@
       transition: all 0.15s;
     }
     .sb-refresh-btn:hover { color: #c9a84c; border-color: rgba(201,168,76,0.4); }
+
+    /* ========== SPECTATOR EXIT BUTTON ========== */
+    #spectator-exit-btn {
+      display: none;
+      position: fixed;
+      top: 118px; right: 16px;
+      align-items: center;
+      gap: 4px;
+      background: rgba(180,40,40,0.25);
+      border: 1px solid rgba(255,110,110,0.55);
+      color: #ff9d9d;
+      padding: 5px 13px;
+      border-radius: 20px;
+      font-size: 0.65rem;
+      letter-spacing: 1.5px;
+      font-family: Georgia, serif;
+      cursor: pointer;
+      z-index: 6;
+    }
+    #spectator-exit-btn:active { transform: scale(0.94); }
+
+    /* ========== LOBBY QUICK MATCH CTA (lobby mode only) ========== */
+    #lobby-quickmatch-wrap { display: none; padding: 0 14px 4px; }
+    #lobby-quickmatch-btn {
+      width: 100%; padding: 12px; border-radius: 10px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 0.7rem; letter-spacing: 2px;
+      background: rgba(201,168,76,0.16); border: 1.5px solid #c9a84c; color: #f0dfa0;
+      transition: background 0.2s;
+    }
+    #lobby-quickmatch-btn:hover { background: rgba(201,168,76,0.28); }
+
+    /* ========== LOBBY MODE LAYOUT ========== */
+    body.lobby-mode { justify-content: flex-start; padding: 0; }
+    body.lobby-mode #menu-btn,
+    body.lobby-mode #sidebar-overlay,
+    body.lobby-mode .sb-close,
+    body.lobby-mode h2,
+    body.lobby-mode .spectator-badge,
+    body.lobby-mode #spectator-exit-btn,
+    body.lobby-mode .player-row,
+    body.lobby-mode #game-status-bar,
+    body.lobby-mode #status,
+    body.lobby-mode #chat-fab,
+    body.lobby-mode #board-wrap {
+      display: none !important;
+    }
+    body.lobby-mode #lobby-quickmatch-wrap { display: block; }
+    body.lobby-mode #sidebar {
+      position: static;
+      display: block;
+      width: 100%;
+      max-width: 576px;
+      height: auto;
+      min-height: 100vh;
+      border-right: none;
+      box-shadow: none;
+      background: transparent;
+    }
+    body.lobby-mode .sb-content { overflow-y: visible; }
+    body.lobby-mode .sb-header { justify-content: center; padding-top: 22px; }
   </style>
 </head>
 <body>
@@ -1004,6 +1064,11 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- QUICK MATCH (lobby mode only) -->
+    <div id="lobby-quickmatch-wrap">
+      <button id="lobby-quickmatch-btn" onclick="newGame()">🎲 QUICK MATCH · RANDOM OPPONENT</button>
     </div>
 
     <!-- DIVIDER: CURRENT GAME -->
@@ -1054,6 +1119,8 @@
 <div class="spectator-badge" id="spectator-count">
   👁️ <span id="spec-count">0</span>
 </div>
+
+<button id="spectator-exit-btn" onclick="exitSpectate()">✕ EXIT</button>
 
 <!-- TOP: Opponent's row (North) -->
 <div class="player-row" id="opponent-row">
@@ -1734,6 +1801,9 @@
   function updatePlayerDisplays(data) {
     whiteUserId = data.whiteUserId;
     blackUserId = data.blackUserId;
+
+    const exitBtn = document.getElementById('spectator-exit-btn');
+    if (exitBtn) exitBtn.style.display = (myColor === 'spectator') ? 'flex' : 'none';
 
     const white = data.whitePlayer || { firstName: 'White' };
     const black = data.blackPlayer || { firstName: 'Black' };
@@ -2476,10 +2546,29 @@
   }
 
   // ---- Current Game ----
-  function loadSbCurrentGame() {
+  async function loadSbCurrentGame() {
     const el = document.getElementById('sb-current-inner');
+    if (!el) return;
+
     if (!gameId) {
-      el.innerHTML = `<div class="sb-no-game">No active game</div>`;
+      // No local game context (e.g. fresh lobby load) — ask the server whether
+      // this user already has a live game elsewhere so they can resume it.
+      el.innerHTML = `<div class="sb-no-game">Checking…</div>`;
+      try {
+        const res  = await fetch(`/api/my-active-game/${userId}`);
+        const data = await res.json();
+        if (data.gameId) {
+          el.innerHTML = `
+            <div class="sb-current-card">
+              <div class="sb-current-status">🟢 Game in progress</div>
+              <button class="sb-go-btn" onclick="window.location.href='/join/${data.gameId}'">♟️ RESUME GAME</button>
+            </div>`;
+        } else {
+          el.innerHTML = `<div class="sb-no-game">No active game</div>`;
+        }
+      } catch (e) {
+        el.innerHTML = `<div class="sb-no-game">No active game</div>`;
+      }
       return;
     }
 
@@ -2725,10 +2814,39 @@
     publicPollInterval = null;
   }
 
+  // ---- Spectator Exit ----
+  window.exitSpectate = function() {
+    // Full navigation — browser tears down all timers/polling automatically.
+    window.location.href = '/';
+  };
+
+  // ---- Lobby (landing screen shown when no game is specified) ----
+  function enterLobby() {
+    document.body.classList.add('lobby-mode');
+
+    // Expand all lobby sections by default so options are visible immediately.
+    ['current', 'requests', 'public'].forEach(name => {
+      const sec   = document.getElementById('sec-' + name);
+      const arrow = document.getElementById('arrow-' + name);
+      if (sec)   sec.style.display = 'block';
+      if (arrow) arrow.classList.add('open');
+    });
+
+    loadSbProfile();
+    loadSbCurrentGame();
+    loadSbRequests();
+    startRequestPoll();
+    loadPublicGames();
+    startPublicPoll();
+  }
+
   // Start
   (async () => {
-    await ensureGameId();
-    joinGame();
+    if (gameId) {
+      joinGame();
+    } else {
+      enterLobby();
+    }
     startRequesterPoll(); // always poll in background for play-request accept
   })();
 </script>
