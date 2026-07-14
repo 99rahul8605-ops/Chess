@@ -1158,17 +1158,23 @@ app.post('/api/matchmaking/join', (req, res) => {
     if (now - entry.joinedAt >= MATCH_QUEUE_TTL) matchQueue.delete(qid);
   }
 
-  // Look for someone else already waiting
+  // Look for someone else already waiting — prefer a same time-control match first
+  const myTC = (timeControl === 5) ? 5 : 10;
   let opponent = null;
   for (const [qid, entry] of matchQueue.entries()) {
-    if (qid !== uid) { opponent = entry; break; }
+    if (qid !== uid && entry.timeControl === myTC) { opponent = entry; break; }
+  }
+  if (!opponent) {
+    for (const [qid, entry] of matchQueue.entries()) {
+      if (qid !== uid) { opponent = entry; break; }
+    }
   }
 
   if (opponent) {
     matchQueue.delete(opponent.userId);
     matchQueue.delete(uid);
 
-    const tc = (opponent.timeControl === 5 || timeControl === 5) ? TIME_5_MIN : DEFAULT_TIME_SEC;
+    const tc = (myTC === 5) ? TIME_5_MIN : DEFAULT_TIME_SEC;
     const gameId = createNewGame(tc);
     const game = games.get(gameId);
 
