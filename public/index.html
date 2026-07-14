@@ -983,7 +983,7 @@
     .sb-refresh-btn:hover { color: #c9a84c; border-color: rgba(201,168,76,0.4); }
 
     /* ========== SPECTATOR EXIT BUTTON ========== */
-    #spectator-exit-btn {
+    #exit-btn {
       display: none;
       position: fixed;
       top: 118px; right: 16px;
@@ -1000,7 +1000,7 @@
       cursor: pointer;
       z-index: 6;
     }
-    #spectator-exit-btn:active { transform: scale(0.94); }
+    #exit-btn:active { transform: scale(0.94); }
 
     /* ========== LOBBY QUICK MATCH CTA (lobby mode only) ========== */
     #lobby-quickmatch-wrap { display: none; padding: 4px 14px 14px; }
@@ -1014,6 +1014,14 @@
     }
     #lobby-quickmatch-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(201,168,76,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
     #lobby-quickmatch-btn:active { transform: translateY(0); }
+    #lobby-quickmatch-btn.searching {
+      background: rgba(201,168,76,0.14);
+      color: #f0dfa0;
+      border: 1.5px solid rgba(201,168,76,0.5);
+      box-shadow: none;
+      animation: qm-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes qm-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
 
     /* ========== LOBBY MODE LAYOUT ========== */
     body.lobby-mode { justify-content: flex-start; padding: 0; }
@@ -1022,7 +1030,7 @@
     body.lobby-mode .sb-close,
     body.lobby-mode h2,
     body.lobby-mode .spectator-badge,
-    body.lobby-mode #spectator-exit-btn,
+    body.lobby-mode #exit-btn,
     body.lobby-mode .player-row,
     body.lobby-mode #game-status-bar,
     body.lobby-mode #status,
@@ -1170,7 +1178,7 @@
   👁️ <span id="spec-count">0</span>
 </div>
 
-<button id="spectator-exit-btn" onclick="exitSpectate()">✕ EXIT</button>
+<button id="exit-btn" onclick="exitSpectate()">✕ EXIT</button>
 
 <!-- TOP: Opponent's row (North) -->
 <div class="player-row" id="opponent-row">
@@ -1852,8 +1860,8 @@
     whiteUserId = data.whiteUserId;
     blackUserId = data.blackUserId;
 
-    const exitBtn = document.getElementById('spectator-exit-btn');
-    if (exitBtn) exitBtn.style.display = (myColor === 'spectator') ? 'flex' : 'none';
+    const exitBtn = document.getElementById('exit-btn');
+    if (exitBtn) exitBtn.style.display = 'flex';
 
     const white = data.whitePlayer || { firstName: 'White' };
     const black = data.blackPlayer || { firstName: 'Black' };
@@ -2179,14 +2187,85 @@
   }
 
   // --- New Game ---
+  // ---- Quick Match (real matchmaking queue) ----
+  let quickMatchActive = false;
+  let quickMatchPollInterval = null;
+  let quickMatchTimeout = null;
+
   async function newGame() {
-    try {
-      const res = await fetch('/api/game/new', { method: 'POST' });
-      const data = await res.json();
-      window.location.replace(`/join/${data.gameId}`);
-    } catch (err) {
-      alert('Could not create new game.');
+    if (quickMatchActive) {
+      // Cancel search
+      try { await fetch(`/api/matchmaking/${userId}`, { method: 'DELETE' }); } catch(e) {}
+      quickMatchActive = false;
+      stopQuickMatchPoll();
+      clearTimeout(quickMatchTimeout);
+      updateQuickMatchBtn();
+      return;
     }
+
+    quickMatchActive = true;
+    updateQuickMatchBtn();
+
+    try {
+      const res  = await fetch('/api/matchmaking/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo, timeControl: myTC })
+      });
+      const data = await res.json();
+      if (data.gameId) {
+        quickMatchActive = false;
+        window.location.replace(`/join/${data.gameId}`);
+        return;
+      }
+      // No one waiting yet — poll until someone else joins the queue
+      startQuickMatchPoll();
+      quickMatchTimeout = setTimeout(async () => {
+        if (quickMatchActive) {
+          try { await fetch(`/api/matchmaking/${userId}`, { method: 'DELETE' }); } catch(e) {}
+          quickMatchActive = false;
+          stopQuickMatchPoll();
+          updateQuickMatchBtn();
+        }
+      }, 2 * 60 * 1000);
+    } catch (err) {
+      quickMatchActive = false;
+      updateQuickMatchBtn();
+      alert('Could not start quick match. Try again.');
+    }
+  }
+  window.newGame = newGame;
+
+  function updateQuickMatchBtn() {
+    const btn = document.getElementById('lobby-quickmatch-btn');
+    if (!btn) return;
+    if (quickMatchActive) {
+      btn.textContent = '⏳ SEARCHING FOR OPPONENT · TAP TO CANCEL';
+      btn.classList.add('searching');
+    } else {
+      btn.textContent = '🎲 QUICK MATCH · RANDOM OPPONENT';
+      btn.classList.remove('searching');
+    }
+  }
+
+  function startQuickMatchPoll() {
+    if (quickMatchPollInterval) return;
+    quickMatchPollInterval = setInterval(async () => {
+      try {
+        const res  = await fetch(`/api/matchmaking/status/${userId}`);
+        const data = await res.json();
+        if (data.gameId) {
+          stopQuickMatchPoll();
+          clearTimeout(quickMatchTimeout);
+          quickMatchActive = false;
+          window.location.replace(`/join/${data.gameId}`);
+        }
+      } catch(e) {}
+    }, 2000);
+  }
+  function stopQuickMatchPoll() {
+    clearInterval(quickMatchPollInterval);
+    quickMatchPollInterval = null;
   }
 
   // --- Update Status Bar & Game Over Overlay ---
