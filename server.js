@@ -839,7 +839,7 @@ app.post('/api/game/:gameId/move', async (req, res) => {
 
 app.post('/api/game/:gameId/resign', async (req, res) => {
   const { gameId } = req.params;
-  const { userId } = req.body;
+  const { userId, reason } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   const game = games.get(gameId);
@@ -858,6 +858,8 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
     return res.status(400).json({ error: 'Game already over' });
   }
 
+  const finalReason = (reason === 'exit') ? 'exit' : 'resign';
+
   game.gameOverByTime = true;
   game.resignedBy = playerColor;
   const winner = playerColor === 'white' ? 'black' : 'white';
@@ -870,7 +872,7 @@ app.post('/api/game/:gameId/resign', async (req, res) => {
     success: true,
     ...state,
     winner,           // ensure resign winner is never overwritten by buildStateResponse
-    reason: 'resign',
+    reason: finalReason,
     resignedBy: playerColor,
     isGameOver: true,
   });
