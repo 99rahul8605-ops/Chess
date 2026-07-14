@@ -916,6 +916,7 @@
       font-size: 0.62rem; letter-spacing: 1.5px; transition: all 0.15s;
     }
     .sb-tc-btn.selected { background: rgba(201,168,76,0.18); border-color: #c9a84c; color: #c9a84c; }
+    .sb-tc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .sb-send-btn {
       width: 100%; padding: 8px; border-radius: 8px; cursor: pointer;
       font-family: Georgia, serif; font-size: 0.65rem; letter-spacing: 2px;
@@ -1132,6 +1133,10 @@
 
     <!-- QUICK MATCH (lobby mode only) -->
     <div id="lobby-quickmatch-wrap">
+      <div class="sb-req-tc" style="margin-bottom:8px;">
+        <button class="sb-tc-btn selected" id="qm-tc-5-btn" onclick="selectQmTC(5)">⏱ 5 min</button>
+        <button class="sb-tc-btn" id="qm-tc-10-btn" onclick="selectQmTC(10)">⏱ 10 min</button>
+      </div>
       <button id="lobby-quickmatch-btn" onclick="newGame()">🎲 QUICK MATCH · RANDOM OPPONENT</button>
     </div>
 
@@ -2201,6 +2206,14 @@
   let quickMatchActive = false;
   let quickMatchPollInterval = null;
   let quickMatchTimeout = null;
+  let quickMatchTC = 5;
+
+  function selectQmTC(val) {
+    quickMatchTC = val;
+    document.getElementById('qm-tc-5-btn').classList.toggle('selected', val === 5);
+    document.getElementById('qm-tc-10-btn').classList.toggle('selected', val === 10);
+  }
+  window.selectQmTC = selectQmTC;
 
   async function newGame() {
     if (quickMatchActive) {
@@ -2220,7 +2233,7 @@
       const res  = await fetch('/api/matchmaking/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, userInfo, timeControl: myTC })
+        body: JSON.stringify({ userId, userInfo, timeControl: quickMatchTC })
       });
       const data = await res.json();
       if (data.gameId) {
@@ -2249,12 +2262,18 @@
   function updateQuickMatchBtn() {
     const btn = document.getElementById('lobby-quickmatch-btn');
     if (!btn) return;
+    const tc5 = document.getElementById('qm-tc-5-btn');
+    const tc10 = document.getElementById('qm-tc-10-btn');
     if (quickMatchActive) {
       btn.textContent = '⏳ SEARCHING FOR OPPONENT · TAP TO CANCEL';
       btn.classList.add('searching');
+      if (tc5) tc5.disabled = true;
+      if (tc10) tc10.disabled = true;
     } else {
       btn.textContent = '🎲 QUICK MATCH · RANDOM OPPONENT';
       btn.classList.remove('searching');
+      if (tc5) tc5.disabled = false;
+      if (tc10) tc10.disabled = false;
     }
   }
 
