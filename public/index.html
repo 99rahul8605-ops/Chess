@@ -1037,6 +1037,7 @@
     body.lobby-mode #game-status-bar,
     body.lobby-mode #status,
     body.lobby-mode #chat-fab,
+    body.lobby-mode #controls,
     body.lobby-mode #board-wrap {
       display: none !important;
     }
@@ -1144,6 +1145,7 @@
     <!-- DIVIDER: PLAY REQUESTS -->
     <div class="sb-divider-label" onclick="toggleSbSection('requests')" style="cursor:pointer;">
       ⚔️ PLAY REQUESTS <span class="sb-arrow" id="arrow-requests">▼</span>
+      <button class="sb-inline-refresh" onclick="event.stopPropagation();loadSbRequests()">↻</button>
     </div>
     <div class="sb-collapsible" id="sec-requests" style="display:none;">
       <div style="padding:0 14px 12px;">
