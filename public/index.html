@@ -25,7 +25,7 @@
     /* Spectator count badge */
     .spectator-badge {
       position: fixed;
-      top: 80px;
+      top: 142px;
       right: 16px;
       background: rgba(0,0,0,0.4);
       padding: 2px 12px;
@@ -982,25 +982,27 @@
     }
     .sb-refresh-btn:hover { color: #c9a84c; border-color: rgba(201,168,76,0.4); }
 
-    /* ========== SPECTATOR EXIT BUTTON ========== */
+    /* ========== EXIT BUTTON (mirrors menu button, top-right) ========== */
     #exit-btn {
       display: none;
       position: fixed;
-      top: 118px; right: 16px;
-      align-items: center;
-      gap: 4px;
-      background: rgba(180,40,40,0.25);
-      border: 1px solid rgba(255,110,110,0.55);
+      top: 80px; right: 16px;
+      width: 54px; height: 54px;
+      border-radius: 50%;
+      align-items: center; justify-content: center;
+      background: rgba(30,19,10,0.85);
+      border: 1.5px solid rgba(255,110,110,0.55);
       color: #ff9d9d;
-      padding: 5px 13px;
-      border-radius: 20px;
-      font-size: 0.65rem;
-      letter-spacing: 1.5px;
-      font-family: Georgia, serif;
+      font-size: 1.3rem;
       cursor: pointer;
-      z-index: 6;
+      z-index: 300;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+      transition: transform 0.15s, background 0.2s;
+      font-family: Georgia, serif;
+      padding: 0;
     }
-    #exit-btn:active { transform: scale(0.94); }
+    #exit-btn:active { transform: scale(0.9); }
+    #exit-btn:hover { background: rgba(180,40,40,0.28); }
 
     /* ========== LOBBY QUICK MATCH CTA (lobby mode only) ========== */
     #lobby-quickmatch-wrap { display: none; padding: 4px 14px 14px; }
@@ -1178,7 +1180,7 @@
   👁️ <span id="spec-count">0</span>
 </div>
 
-<button id="exit-btn" onclick="exitSpectate()">✕ EXIT</button>
+<button id="exit-btn" onclick="exitSpectate()" title="Exit to Lobby">🚪</button>
 
 <!-- TOP: Opponent's row (North) -->
 <div class="player-row" id="opponent-row">
