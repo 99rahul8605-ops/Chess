@@ -25,17 +25,18 @@
     /* Spectator count badge */
     .spectator-badge {
       position: fixed;
-      top: 142px;
-      right: 16px;
+      top: 96px;
+      left: 50%;
+      transform: translateX(-50%);
       background: rgba(0,0,0,0.4);
-      padding: 2px 12px;
+      padding: 4px 14px;
       border-radius: 20px;
-      font-size: 0.65rem;
+      font-size: 0.7rem;
       border: 1px dashed #4a3010;
       display: flex;
       align-items: center;
       gap: 4px;
-      z-index: 5;
+      z-index: 200;
     }
 
     /* Player Row */
@@ -2295,6 +2296,10 @@
         const winIcon = data.winner === 'white' ? '⚪' : '⚫';
         headline = `${winIcon} ${winName.toUpperCase()} WINS!`;
         sub = (data.winner === myColor) ? '🏆 You won!' : (myColor ? 'Better luck next time' : `${data.winner} wins`);
+        if (data.reason === 'exit' && data.resignedBy) {
+          const exitedName = data.resignedBy === 'white' ? (data.whitePlayer?.firstName || 'White') : (data.blackPlayer?.firstName || 'Black');
+          sub = `${exitedName} exited — Defeated 🚪`;
+        }
       } else if (data.isDraw) {
         headline = '🤝 DRAW BY AGREEMENT';
         sub = 'Honours even — well played!';
@@ -2360,6 +2365,9 @@
       if (data.reason === 'resign' && data.resignedBy) {
         const resignedName = data.resignedBy === 'white' ? whiteName : blackName;
         subText = `${resignedName} resigned 🏳️`;
+      } else if (data.reason === 'exit' && data.resignedBy) {
+        const exitedName = data.resignedBy === 'white' ? whiteName : blackName;
+        subText = `${exitedName} exited the game — Defeated 🚪`;
       } else if (data.reason === 'timeout') {
         subText = `${lostName} ran out of time ⏰`;
       } else if (data.reason === 'checkmate') {
@@ -2947,8 +2955,22 @@
     publicPollInterval = null;
   }
 
-  // ---- Spectator Exit ----
-  window.exitSpectate = function() {
+  // ---- Exit Button (players + spectators) ----
+  window.exitSpectate = async function() {
+    const isActivePlayer = (myColor === 'white' || myColor === 'black') &&
+                            gameId && !waitingForOpponent && !gameOver;
+
+    if (isActivePlayer) {
+      if (!confirm('Exiting now will end the game — you will be marked as defeated. Continue?')) return;
+      try {
+        await fetch(`/api/game/${gameId}/resign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, reason: 'exit' })
+        });
+      } catch (e) {}
+    }
+
     // Full navigation — browser tears down all timers/polling automatically.
     window.location.href = '/';
   };
