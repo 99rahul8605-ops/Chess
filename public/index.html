@@ -15,19 +15,27 @@
         linear-gradient(160deg, #1f1409 0%, #170f06 45%, #100a04 100%);
       background-attachment: fixed;
       min-height: 100vh;
-      display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
       font-family: Georgia, serif;
       color: #c9a84c;
-      padding: 150px 12px 12px;
+      padding: 12px;
     }
-    h2 { font-size: 1.3rem; letter-spacing: 5px; margin-bottom: 5px; }
+    #game-header-bar {
+      width: 100%; max-width: 576px;
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    #game-header-center {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      flex: 1; min-width: 0;
+    }
+    h2 {
+      font-size: 1.3rem; letter-spacing: 5px; margin: 0;
+      white-space: nowrap;
+    }
 
     /* Spectator count badge */
     .spectator-badge {
-      position: fixed;
-      top: 84px;
-      left: 50%;
-      transform: translateX(-50%);
       background: rgba(0,0,0,0.4);
       padding: 4px 14px;
       border-radius: 20px;
@@ -36,7 +44,6 @@
       display: flex;
       align-items: center;
       gap: 4px;
-      z-index: 200;
     }
 
     /* Player Row */
@@ -738,8 +745,7 @@
 
     /* ========== MENU BUTTON (top-left) ========== */
     #menu-btn {
-      position: fixed;
-      top: 80px; left: 12px;
+      flex-shrink: 0;
       width: 54px; height: 54px;
       border-radius: 50%;
       background: rgba(30,19,10,0.85);
@@ -755,7 +761,6 @@
       padding: 0;
       writing-mode: initial;
       letter-spacing: normal;
-      height: 54px;
     }
     #menu-btn:active { transform: scale(0.9); }
     #menu-btn.open { background: rgba(201,168,76,0.22); }
@@ -986,8 +991,7 @@
     /* ========== EXIT BUTTON (mirrors menu button, top-right) ========== */
     #exit-btn {
       display: none;
-      position: fixed;
-      top: 80px; right: 16px;
+      flex-shrink: 0;
       width: 54px; height: 54px;
       border-radius: 50%;
       align-items: center; justify-content: center;
@@ -1029,6 +1033,7 @@
     /* ========== LOBBY MODE LAYOUT ========== */
     body.lobby-mode { justify-content: flex-start; padding: 0; }
     body.lobby-mode #menu-btn,
+    body.lobby-mode #game-header-bar,
     body.lobby-mode #sidebar-overlay,
     body.lobby-mode .sb-close,
     body.lobby-mode h2,
@@ -1083,9 +1088,6 @@
   </style>
 </head>
 <body>
-
-<!-- ===== MENU BUTTON ===== -->
-<button id="menu-btn" onclick="toggleSidebar()" title="Menu">☰</button>
 
 <!-- ===== SIDEBAR OVERLAY ===== -->
 <div id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -1177,13 +1179,16 @@
   </div>
 </div>
 
-<h2>♜ CHESS ♞</h2>
-
-<div class="spectator-badge" id="spectator-count">
-  👁️ <span id="spec-count">0</span>
+<div id="game-header-bar">
+  <button id="menu-btn" onclick="toggleSidebar()" title="Menu">☰</button>
+  <div id="game-header-center">
+    <h2>♜ CHESS ♞</h2>
+    <div class="spectator-badge" id="spectator-count">
+      👁️ <span id="spec-count">0</span>
+    </div>
+  </div>
+  <button id="exit-btn" onclick="exitSpectate()" title="Exit to Lobby">🚪</button>
 </div>
-
-<button id="exit-btn" onclick="exitSpectate()" title="Exit to Lobby">🚪</button>
 
 <!-- TOP: Opponent's row (North) -->
 <div class="player-row" id="opponent-row">
