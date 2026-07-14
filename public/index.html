@@ -7,12 +7,17 @@
   <style>
     /* ========== COMPLETE STYLES ========== */
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: #140c05; }
     body {
-      background: var(--tg-theme-bg-color, #1e130a);
+      background:
+        radial-gradient(ellipse 900px 500px at 50% -10%, rgba(201,168,76,0.10), transparent 60%),
+        radial-gradient(ellipse 700px 500px at 100% 100%, rgba(120,70,20,0.10), transparent 60%),
+        linear-gradient(160deg, #1f1409 0%, #170f06 45%, #100a04 100%);
+      background-attachment: fixed;
       min-height: 100vh;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       font-family: Georgia, serif;
-      color: var(--tg-theme-text-color, #c9a84c);
+      color: #c9a84c;
       padding: 12px;
     }
     h2 { font-size: 1.3rem; letter-spacing: 5px; margin-bottom: 5px; }
@@ -26,7 +31,7 @@
       padding: 2px 12px;
       border-radius: 20px;
       font-size: 0.65rem;
-      border: 1px dashed var(--tg-theme-button-color);
+      border: 1px dashed #4a3010;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -49,7 +54,7 @@
       background: rgba(0,0,0,0.2);
       border-radius: 30px;
       padding: 4px 8px;
-      border: 1px solid var(--tg-theme-button-color, #4a3010);
+      border: 1px solid #4a3010;
     }
 
     .player-identity {
@@ -197,7 +202,7 @@
 
     /* Board */
     #board-wrap {
-      border: 3px solid var(--tg-theme-button-color, #5a3c10);
+      border: 3px solid #5a3c10;
       box-shadow: 0 8px 40px rgba(0,0,0,0.8);
       width: 100%;
       max-width: 576px;
@@ -449,12 +454,12 @@
     }
     #info {
       font-size: 0.68rem; letter-spacing: 3px; padding: 5px 12px;
-      border: 1px solid var(--tg-theme-button-color, #4a3010);
+      border: 1px solid #4a3010;
     }
     button {
       font-family: Georgia, serif; font-size: 0.72rem; letter-spacing: 2px; padding: 9px 20px;
-      background: transparent; color: var(--tg-theme-text-color, #c9a84c);
-      border: 1.5px solid var(--tg-theme-button-color, #4a3010); cursor: pointer;
+      background: transparent; color: #c9a84c;
+      border: 1.5px solid #4a3010; cursor: pointer;
     }
     button:hover { background: rgba(201,168,76,0.08); }
     #resign-btn { background: rgba(200, 40, 40, 0.18); border-color: #c04040; border-width: 2px; color: #f0a0a0; font-weight: bold; }
@@ -526,8 +531,8 @@
       z-index: 100;
     }
     .modal-content {
-      background: var(--tg-theme-bg-color, #2a1e0f);
-      border: 2px solid var(--tg-theme-button-color, #c9a84c);
+      background: #2a1e0f;
+      border: 2px solid #c9a84c;
       border-radius: 16px;
       padding: 20px;
       max-width: 300px;
@@ -643,7 +648,7 @@
     #chat-fab {
       position: fixed; bottom: 22px; right: 18px;
       width: 48px; height: 48px; border-radius: 50%;
-      background: var(--tg-theme-button-color, #5a3c10);
+      background: #5a3c10;
       border: 2px solid rgba(201,168,76,0.5);
       color: #c9a84c; font-size: 1.35rem;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -793,11 +798,19 @@
 
     /* Sidebar section divider labels */
     .sb-divider-label {
-      font-size: 0.58rem; letter-spacing: 2.5px; color: rgba(201,168,76,0.5);
-      text-transform: uppercase; font-family: Georgia, serif;
-      padding: 10px 14px 6px;
+      font-size: 0.6rem; letter-spacing: 2.5px; color: rgba(201,168,76,0.65);
+      text-transform: uppercase; font-family: Georgia, serif; font-weight: bold;
+      padding: 14px 14px 8px 18px;
+      margin-top: 4px;
       border-top: 1px solid rgba(201,168,76,0.12);
       display: flex; align-items: center; gap: 8px;
+      position: relative;
+    }
+    .sb-divider-label::before {
+      content: '';
+      position: absolute; left: 0; top: 16px; bottom: 8px;
+      width: 3px; border-radius: 2px;
+      background: linear-gradient(180deg, #c9a84c, rgba(201,168,76,0.15));
     }
     .sb-inline-refresh {
       margin-left: auto; background: none; border: none;
@@ -822,9 +835,10 @@
     }
     .sb-profile-card {
       display: flex; flex-direction: column; align-items: center; gap: 10px;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(201,168,76,0.18);
+      background: linear-gradient(160deg, rgba(50,33,13,0.6), rgba(15,9,3,0.6));
+      border: 1px solid rgba(201,168,76,0.2);
       border-radius: 14px; padding: 18px 12px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
     }
     .sb-avatar {
       width: 64px; height: 64px; border-radius: 50%;
@@ -849,9 +863,10 @@
     /* ---- Current game section ---- */
     #sb-current { padding: 12px 14px; }
     .sb-current-card {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(201,168,76,0.18);
+      background: linear-gradient(160deg, rgba(50,33,13,0.55), rgba(15,9,3,0.55));
+      border: 1px solid rgba(201,168,76,0.2);
       border-radius: 12px; padding: 14px 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
     }
     .sb-current-vs {
       display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -881,8 +896,10 @@
     /* ---- Play Request section ---- */
     #sb-requests { padding: 12px 14px; }
     .sb-send-request {
-      background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.18);
+      background: linear-gradient(160deg, rgba(50,33,13,0.55), rgba(15,9,3,0.55));
+      border: 1px solid rgba(201,168,76,0.2);
       border-radius: 12px; padding: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
     }
     .sb-req-label { font-size: 0.6rem; letter-spacing: 2px; color: rgba(201,168,76,0.6); margin-bottom: 8px; text-transform: uppercase; }
     .sb-req-tc { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -904,9 +921,11 @@
     .sb-send-btn.cancel:hover { background: rgba(200,40,40,0.25); }
     .sb-req-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
     .sb-req-item {
-      background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.15);
+      background: linear-gradient(160deg, rgba(45,30,12,0.5), rgba(15,9,3,0.5));
+      border: 1px solid rgba(201,168,76,0.15);
       border-radius: 10px; padding: 10px 10px 8px;
       display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.25);
     }
     .sb-req-avatar {
       width: 34px; height: 34px; border-radius: 50%;
@@ -936,10 +955,13 @@
     /* ---- Public games section ---- */
     #sb-public { padding: 12px 14px; }
     .sb-public-item {
-      background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.15);
+      background: linear-gradient(160deg, rgba(45,30,12,0.5), rgba(15,9,3,0.5));
+      border: 1px solid rgba(201,168,76,0.15);
       border-radius: 10px; padding: 10px 10px 8px; margin-bottom: 6px; cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+      transition: border-color 0.15s, background 0.15s, transform 0.15s;
     }
+    .sb-public-item:active { transform: scale(0.98); }
     .sb-public-item:hover { border-color: rgba(201,168,76,0.4); background: rgba(201,168,76,0.06); }
     .sb-public-vs {
       display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #fff;
@@ -981,14 +1003,17 @@
     #spectator-exit-btn:active { transform: scale(0.94); }
 
     /* ========== LOBBY QUICK MATCH CTA (lobby mode only) ========== */
-    #lobby-quickmatch-wrap { display: none; padding: 0 14px 4px; }
+    #lobby-quickmatch-wrap { display: none; padding: 4px 14px 14px; }
     #lobby-quickmatch-btn {
-      width: 100%; padding: 12px; border-radius: 10px; cursor: pointer;
-      font-family: Georgia, serif; font-size: 0.7rem; letter-spacing: 2px;
-      background: rgba(201,168,76,0.16); border: 1.5px solid #c9a84c; color: #f0dfa0;
-      transition: background 0.2s;
+      width: 100%; padding: 15px; border-radius: 12px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 0.72rem; letter-spacing: 2.5px;
+      background: linear-gradient(160deg, #e0c070, #b8923c 55%, #8a6d2c);
+      border: none; color: #241a0a; font-weight: bold;
+      box-shadow: 0 6px 20px rgba(201,168,76,0.28), inset 0 1px 0 rgba(255,255,255,0.35);
+      transition: transform 0.15s, box-shadow 0.15s;
     }
-    #lobby-quickmatch-btn:hover { background: rgba(201,168,76,0.28); }
+    #lobby-quickmatch-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(201,168,76,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
+    #lobby-quickmatch-btn:active { transform: translateY(0); }
 
     /* ========== LOBBY MODE LAYOUT ========== */
     body.lobby-mode { justify-content: flex-start; padding: 0; }
@@ -1018,7 +1043,31 @@
       background: transparent;
     }
     body.lobby-mode .sb-content { overflow-y: visible; }
-    body.lobby-mode .sb-header { justify-content: center; padding-top: 22px; }
+    body.lobby-mode #sb-tagline { display: block !important; }
+    body.lobby-mode .sb-header {
+      justify-content: center;
+      flex-direction: column;
+      gap: 4px;
+      padding: 34px 14px 20px;
+      border-bottom: none;
+      position: relative;
+    }
+    body.lobby-mode .sb-header::after {
+      content: '';
+      position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 120px; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(201,168,76,0.55), transparent);
+    }
+    body.lobby-mode .sb-logo {
+      font-size: 1.7rem; letter-spacing: 7px;
+      background: linear-gradient(180deg, #f0dfa0, #c9a84c 60%, #8a6d2c);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+      text-shadow: 0 2px 18px rgba(201,168,76,0.25);
+    }
+    body.lobby-mode .sb-tagline {
+      display: block; font-size: 0.58rem; letter-spacing: 3px;
+      color: rgba(201,168,76,0.5); text-transform: uppercase; margin-top: 2px;
+    }
   </style>
 </head>
 <body>
@@ -1033,6 +1082,7 @@
 <div id="sidebar">
   <div class="sb-header">
     <span class="sb-logo">♜ CHESS</span>
+    <span class="sb-tagline" id="sb-tagline" style="display:none;">Play · Challenge · Watch</span>
     <button class="sb-close" onclick="closeSidebar()">✕</button>
   </div>
 
