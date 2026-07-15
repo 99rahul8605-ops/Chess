@@ -556,6 +556,12 @@ async function recordGameResult(game, explicitWinner = null) {
       else if (winner === 'black') await updateUserStats(blackId, blackInfo, 'win');
       else await updateUserStats(blackId, blackInfo, 'loss');
     }
+    if (whiteId && blackId) {
+      if (!recentOpponents.has(whiteId)) recentOpponents.set(whiteId, new Map());
+      if (!recentOpponents.has(blackId)) recentOpponents.set(blackId, new Map());
+      recentOpponents.get(whiteId).set(blackId, { userInfo: blackInfo, lastPlayedAt: Date.now() });
+      recentOpponents.get(blackId).set(whiteId, { userInfo: whiteInfo, lastPlayedAt: Date.now() });
+    }
     game.statsRecorded = true;
   }
 }
@@ -1235,6 +1241,80 @@ app.delete('/api/matchmaking/:userId', (req, res) => {
 
 // ========== FRIENDS ==========
 
+// POST /api/friend-request/send — direct request (used by the in-game "+ Add Friend" icon,
+// where both userIds are already known — no deep link needed).
+app.post('/api/friend-request/send', (req, res) => {
+  const { userId, userInfo, targetUserId } = req.body;
+  if (!userId || !targetUserId) return res.status(400).json({ error: 'userId and targetUserId required' });
+  const uid = String(userId), tid = String(targetUserId);
+  if (uid === tid) return res.status(400).json({ error: 'Cannot friend yourself' });
+  if (friends.get(uid)?.has(tid)) return res.status(400).json({ error: 'Already friends' });
+
+  // If they already sent ME a request, just accept it instead of creating a duplicate reverse request
+  const theirRequestToMe = friendRequests.get(uid)?.get(tid);
+  if (theirRequestToMe) {
+    friendRequests.get(uid).delete(tid);
+    if (!friends.has(uid)) friends.set(uid, new Map());
+    if (!friends.has(tid)) friends.set(tid, new Map());
+    friends.get(uid).set(tid, theirRequestToMe.userInfo);
+    friends.get(tid).set(uid, userInfo || { firstName: 'Player' });
+    return res.json({ success: true, autoAccepted: true });
+  }
+
+  if (friendRequests.get(tid)?.has(uid)) {
+    return res.json({ success: true, alreadySent: true }); // don't duplicate
+  }
+
+  if (!friendRequests.has(tid)) friendRequests.set(tid, new Map());
+  friendRequests.get(tid).set(uid, { userInfo: userInfo || { firstName: 'Player' }, createdAt: Date.now() });
+
+  // Best-effort bot DM so they get notified even if they don't have the app open
+  const theirChatId = userChatIds.get(tid);
+  if (theirChatId) {
+    bot.telegram.sendMessage(
+      theirChatId,
+      `🤝 *${(userInfo && userInfo.firstName) || 'Someone'}* sent you a friend request!\n\nOpen the app to accept.`,
+      { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '♟️ Open Chess', web_app: { url: `${BASE_URL}/` } }]] } }
+    ).catch(() => {});
+  }
+
+  res.json({ success: true });
+});
+
+// GET /api/friend-status/:userId/:targetId — used to decide what the in-game "+" icon should show
+app.get('/api/friend-status/:userId/:targetId', (req, res) => {
+  const uid = String(req.params.userId), tid = String(req.params.targetId);
+  res.json({
+    isFriend:        !!(friends.get(uid)?.has(tid)),
+    requestSentByMe: !!(friendRequests.get(tid)?.has(uid)),
+    requestFromThem: !!(friendRequests.get(uid)?.has(tid))
+  });
+});
+
+// GET /api/friend-suggestions/:userId — people you've played before who aren't friends yet
+app.get('/api/friend-suggestions/:userId', (req, res) => {
+  const uid = String(req.params.userId);
+  const opponents = recentOpponents.get(uid);
+  if (!opponents) return res.json({ suggestions: [] });
+
+  const myFriends           = friends.get(uid) || new Map();
+  const myIncomingRequests  = friendRequests.get(uid) || new Map();
+
+  const suggestions = [];
+  for (const [oppId, entry] of opponents.entries()) {
+    if (myFriends.has(oppId)) continue;
+    if (myIncomingRequests.has(oppId)) continue; // already pending in the requests list, don't duplicate
+    suggestions.push({
+      userId: oppId,
+      userInfo: entry.userInfo,
+      lastPlayedAt: entry.lastPlayedAt,
+      requestSent: !!(friendRequests.get(oppId)?.has(uid))
+    });
+  }
+  suggestions.sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
+  res.json({ suggestions: suggestions.slice(0, 10) });
+});
+
 // GET /api/bot-username — so the client can build a shareable friend deep-link
 app.get('/api/bot-username', (req, res) => {
   res.json({ username: BOT_USERNAME || '' });
@@ -1409,6 +1489,7 @@ const bot = new Telegraf(BOT_TOKEN);
 const userChatIds    = new Map(); // userId(string) -> private chatId, so we can DM them proactively
 const friends        = new Map(); // userId(string) -> Map<friendId string, friendUserInfo>  (stored both directions)
 const friendRequests = new Map(); // targetUserId(string) -> Map<fromUserId string, { userInfo, createdAt }>
+const recentOpponents = new Map(); // userId(string) -> Map<opponentId string, { userInfo, lastPlayedAt }>  (mutual, powers "suggested friends")
 const FRIEND_REQUEST_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Remember each user's private chatId whenever they message the bot directly,
