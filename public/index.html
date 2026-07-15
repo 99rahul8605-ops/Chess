@@ -1406,9 +1406,14 @@
   const startParam = tg.initDataUnsafe?.start_param;
   const urlParams  = new URLSearchParams(window.location.search);
   const pathMatch  = window.location.pathname.match(/^\/join\/([a-zA-Z0-9_-]+)$/);
+  // For Mini Apps opened via an inline "startapp=" deep link, Telegram keeps
+  // start_param alive for the whole session — even after we navigate to "/".
+  // ?lobby=1 is an explicit override (set by Exit/spectate-exit) that forces
+  // the lobby regardless of a leftover start_param.
+  const forceLobby = urlParams.get('lobby') === '1';
   // If we are on /join/<id>, trust the path — it is always the freshest value.
   // Only fall back to start_param when the path gives nothing (root "/" open).
-  let gameId = pathMatch?.[1] || startParam || urlParams.get('game');
+  let gameId = forceLobby ? null : (pathMatch?.[1] || startParam || urlParams.get('game'));
 
   // When the Mini App is brought back from background with a new startapp
   // (user tapped a DIFFERENT game's inline play button), reload for new game.
@@ -2986,7 +2991,7 @@
     const isActivePlayer = (myColor === 'white' || myColor === 'black') &&
                             gameId && !waitingForOpponent && !gameOver;
 
-    const goHome = () => { window.location.href = '/'; };
+    const goHome = () => { window.location.href = '/?lobby=1'; };
 
     const doExit = async () => {
       if (isActivePlayer) {
