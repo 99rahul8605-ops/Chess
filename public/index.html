@@ -2070,6 +2070,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, userInfo })
       });
+      if (res.status === 404) {
+        document.getElementById('status').textContent = 'This game no longer exists — returning to lobby…';
+        setTimeout(() => { window.location.href = '/?lobby=1'; }, 1500);
+        return;
+      }
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       if (data.color) myColor = data.color;
@@ -2096,6 +2101,13 @@
   async function fetchGameState() {
     try {
       const res = await fetch(`/api/game/${gameId}/state`);
+      if (res.status === 404) {
+        stopLocalTimer();
+        clearInterval(updateInterval);
+        document.getElementById('status').textContent = 'This game no longer exists — returning to lobby…';
+        setTimeout(() => { window.location.href = '/?lobby=1'; }, 1500);
+        return;
+      }
       if (!res.ok) throw new Error();
       const data = await res.json();
       
