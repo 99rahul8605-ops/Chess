@@ -119,6 +119,22 @@
       box-shadow: 0 0 6px rgba(100,176,80,0.3);
     }
 
+    .add-friend-icon-btn {
+      flex-shrink: 0;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: rgba(201,168,76,0.14);
+      border: 1px solid rgba(201,168,76,0.5);
+      color: #c9a84c;
+      font-size: 0.85rem; font-weight: bold;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0; margin: 0 2px;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .add-friend-icon-btn:active { transform: scale(0.9); }
+    .add-friend-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* Clock inline */
     .clock-inline {
       display: flex;
@@ -830,6 +846,40 @@
     }
     .sb-arrow.open { transform: rotate(180deg); opacity: 0.9; }
 
+    /* Tab bar (PLAY / FRIENDS) */
+    .sb-tabs {
+      display: flex; gap: 6px;
+      padding: 10px 14px 4px;
+      flex-shrink: 0;
+    }
+    .sb-tab-btn {
+      flex: 1;
+      padding: 9px 0;
+      border-radius: 9px;
+      cursor: pointer;
+      font-family: Georgia, serif;
+      font-size: 0.68rem;
+      letter-spacing: 1.5px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(201,168,76,0.18);
+      color: rgba(201,168,76,0.55);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .sb-tab-btn.active {
+      background: rgba(201,168,76,0.16);
+      border-color: #c9a84c;
+      color: #f0dfa0;
+      font-weight: bold;
+    }
+    .sb-tab-badge {
+      display: inline-block;
+      background: #e84040; color: #fff;
+      font-size: 0.55rem; font-weight: bold;
+      border-radius: 10px; padding: 1px 6px;
+      margin-left: 3px; vertical-align: middle;
+    }
+    .lobby-tab-panel { display: block; }
+
     /* Sidebar content */
     .sb-content { flex: 1; overflow-y: auto; }
     .sb-section { display: none; }
@@ -1110,8 +1160,16 @@
     <button class="sb-close" onclick="closeSidebar()">✕</button>
   </div>
 
+  <!-- TABS -->
+  <div class="sb-tabs">
+    <button class="sb-tab-btn active" id="tab-btn-play" onclick="switchLobbyTab('play')">🏠 PLAY</button>
+    <button class="sb-tab-btn" id="tab-btn-friends" onclick="switchLobbyTab('friends')">🤝 FRIENDS</button>
+  </div>
+
   <!-- Single scrollable content -->
   <div class="sb-content">
+
+  <div id="lobby-tab-play" class="lobby-tab-panel">
 
     <!-- PROFILE -->
     <div style="padding:16px 14px 12px;">
@@ -1179,19 +1237,6 @@
       </div>
     </div>
 
-    <!-- DIVIDER: FRIENDS -->
-    <div class="sb-divider-label" onclick="toggleSbSection('friends')" style="cursor:pointer;">
-      🤝 FRIENDS <span class="sb-arrow" id="arrow-friends">▼</span>
-      <button class="sb-inline-refresh" onclick="event.stopPropagation();loadFriendsSection()">↻</button>
-    </div>
-    <div class="sb-collapsible" id="sec-friends" style="display:none;">
-      <div style="padding:0 14px 20px;">
-        <button class="sb-send-btn" id="sb-add-friend-btn" onclick="shareFriendLink()" style="margin-bottom:10px;">➤ ADD A FRIEND</button>
-        <div id="sb-friend-requests-list"></div>
-        <div id="sb-friends-list"></div>
-      </div>
-    </div>
-
     <!-- DIVIDER: PUBLIC GAMES -->
     <div class="sb-divider-label" onclick="toggleSbSection('public')" style="cursor:pointer;">
       🌐 LIVE GAMES <span class="sb-arrow" id="arrow-public">▼</span>
@@ -1204,6 +1249,31 @@
     </div>
 
   </div>
+
+  <!-- FRIENDS TAB -->
+  <div id="lobby-tab-friends" class="lobby-tab-panel" style="display:none;">
+    <div style="padding:16px 14px 20px;">
+      <button class="sb-send-btn" id="sb-add-friend-btn" onclick="shareFriendLink()" style="margin-bottom:16px;">➤ ADD A FRIEND</button>
+
+      <div class="sb-divider-label" style="padding-left:0;border-top:none;margin-top:0;">
+        📥 REQUESTS <button class="sb-inline-refresh" onclick="loadFriendsSection()">↻</button>
+      </div>
+      <div id="sb-friend-requests-list" style="margin-bottom:16px;"></div>
+
+      <div class="sb-divider-label" style="padding-left:0;">
+        🤝 MY FRIENDS
+      </div>
+      <div id="sb-friends-list" style="margin-bottom:16px;"></div>
+
+      <div class="sb-divider-label" style="padding-left:0;">
+        ✨ SUGGESTED
+      </div>
+      <div id="sb-friend-suggestions-list"></div>
+    </div>
+  </div>
+
+  </div>
+
 </div>
 
 <div id="game-header-bar">
@@ -1230,6 +1300,7 @@
         </span>
       </div>
     </div>
+    <button class="add-friend-icon-btn" id="opponent-add-friend-btn" style="display:none;" onclick="event.stopPropagation();handleAddFriendClick()" title="Add Friend">+</button>
     <div class="clock-inline" id="opponent-clock-wrap">
       <svg class="clock-svg-ring" viewBox="0 0 36 36">
         <circle class="ring-bg-circle" cx="18" cy="18" r="16"/>
@@ -1300,6 +1371,18 @@
   <div id="info"></div>
   <button id="draw-btn" onclick="offerDraw()">🤝 DRAW</button>
   <button id="resign-btn" onclick="resignGame()">🏳️ RESIGN</button>
+</div>
+
+<!-- Friend Request Popup (can appear even mid-game) -->
+<div id="friend-request-modal" class="modal">
+  <div class="modal-content">
+    <h3>🤝 Friend Request</h3>
+    <p style="margin-bottom:16px;"><span id="friend-request-name">Someone</span> wants to be your friend!</p>
+    <div style="display:flex; gap:10px;">
+      <button id="friend-request-accept-btn" class="sb-send-btn" style="flex:1;">✓ ACCEPT</button>
+      <button id="friend-request-reject-btn" class="sb-send-btn cancel" style="flex:1;">✕ REJECT</button>
+    </div>
+  </div>
 </div>
 
 <!-- Stats Modal -->
@@ -1979,7 +2062,57 @@
         black: { digits: opponentClockDigits, ring: opponentRing, wrap: opponentClockWrap }
       };
     }
+
+    refreshAddFriendButton();
   }
+
+  // ---- In-game "Add Friend" icon on opponent's row ----
+  let lastFriendCheckOpponentId = null;
+  async function refreshAddFriendButton() {
+    const btn = document.getElementById('opponent-add-friend-btn');
+    if (!btn) return;
+    if (myColor !== 'white' && myColor !== 'black') { btn.style.display = 'none'; return; } // spectators: skip
+
+    const opponentId = myColor === 'white' ? blackUserId : whiteUserId;
+    if (!opponentId) { btn.style.display = 'none'; return; }
+    if (opponentId === lastFriendCheckOpponentId) return; // already resolved for this opponent
+    lastFriendCheckOpponentId = opponentId;
+
+    try {
+      const res  = await fetch(`/api/friend-status/${userId}/${opponentId}`);
+      const data = await res.json();
+      if (data.isFriend) {
+        btn.style.display = 'none';
+      } else if (data.requestSentByMe) {
+        btn.style.display = 'flex'; btn.textContent = '✓'; btn.disabled = true; btn.title = 'Friend request sent';
+      } else if (data.requestFromThem) {
+        btn.style.display = 'flex'; btn.textContent = '✓'; btn.disabled = false; btn.title = 'Accept friend request';
+      } else {
+        btn.style.display = 'flex'; btn.textContent = '+'; btn.disabled = false; btn.title = 'Add Friend';
+      }
+    } catch(e) { btn.style.display = 'none'; }
+  }
+
+  async function handleAddFriendClick() {
+    const btn = document.getElementById('opponent-add-friend-btn');
+    const opponentId = myColor === 'white' ? blackUserId : whiteUserId;
+    if (!opponentId || !btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+      await fetch('/api/friend-request/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo, targetUserId: opponentId })
+      });
+      lastFriendCheckOpponentId = null; // force a fresh status check
+      refreshAddFriendButton();
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = '+';
+    }
+  }
+  window.handleAddFriendClick = handleAddFriendClick;
 
   // --- Captured Pieces Update ---
   const PIECE_SYMBOLS = {
@@ -2711,13 +2844,31 @@
       if (name === 'requests') { loadSbRequests(); startRequestPoll(); }
       if (name === 'public')   { loadPublicGames(); startPublicPoll(); }
       if (name === 'current')  { loadSbCurrentGame(); }
-      if (name === 'friends')  { loadFriendsSection(); startFriendsPoll(); }
     } else {
       if (name === 'requests') stopRequestPoll();
       if (name === 'public')   stopPublicPoll();
-      if (name === 'friends')  stopFriendsPoll();
     }
   }
+
+  function switchLobbyTab(tab) {
+    const playPanel    = document.getElementById('lobby-tab-play');
+    const friendsPanel  = document.getElementById('lobby-tab-friends');
+    const playBtn       = document.getElementById('tab-btn-play');
+    const friendsBtn     = document.getElementById('tab-btn-friends');
+    if (tab === 'friends') {
+      playPanel.style.display = 'none';
+      friendsPanel.style.display = 'block';
+      playBtn.classList.remove('active');
+      friendsBtn.classList.add('active');
+      loadFriendsSection();
+    } else {
+      playPanel.style.display = 'block';
+      friendsPanel.style.display = 'none';
+      playBtn.classList.add('active');
+      friendsBtn.classList.remove('active');
+    }
+  }
+  window.switchLobbyTab = switchLobbyTab;
 
   window.toggleSidebar   = toggleSidebar;
   window.closeSidebar    = closeSidebar;
@@ -2973,59 +3124,147 @@
   }
 
   // ---- Friends ----
-  async function loadFriendsSection() {
-    const reqList  = document.getElementById('sb-friend-requests-list');
-    const friList  = document.getElementById('sb-friends-list');
-    if (!reqList || !friList) return;
+  const notifiedFriendRequestIds = new Set(); // requests we've already popped up (avoid re-showing every poll)
+  let friendPopupQueue = [];
+  let friendPopupShowing = false;
 
+  async function loadFriendsSection() {
     const inActiveGame = !!(gameId && !waitingForOpponent && !gameOver);
 
     try {
-      const [reqRes, friRes] = await Promise.all([
+      const [reqRes, friRes, sugRes] = await Promise.all([
         fetch(`/api/friend-requests/${userId}`),
-        fetch(`/api/friends/${userId}`)
+        fetch(`/api/friends/${userId}`),
+        fetch(`/api/friend-suggestions/${userId}`)
       ]);
       const reqData = await reqRes.json();
       const friData = await friRes.json();
+      const sugData = await sugRes.json();
 
       const requests = reqData.requests || [];
-      reqList.innerHTML = requests.length === 0 ? '' : requests.map(r => {
-        const name    = r.userInfo?.firstName || 'Player';
-        const initial = name[0].toUpperCase();
-        return `
-          <div class="sb-req-item">
-            <div class="sb-req-avatar">${initial}</div>
-            <div class="sb-req-info">
-              <div class="sb-req-name">${escapeHtml(name)}</div>
-              <div class="sb-req-meta">wants to be friends</div>
-            </div>
-            <button class="sb-accept-btn" onclick="acceptFriendRequest('${r.fromUserId}')">ACCEPT</button>
-            <button class="sb-decline-btn" onclick="declineFriendRequest('${r.fromUserId}')">✕</button>
-          </div>`;
-      }).join('');
 
-      const list = friData.friends || [];
-      if (list.length === 0) {
-        friList.innerHTML = `<div class="sb-req-empty">No friends yet.<br>Tap "Add a Friend" to invite someone.</div>`;
-        return;
+      // Update the FRIENDS tab badge with the pending-request count
+      const tabBtn = document.getElementById('tab-btn-friends');
+      if (tabBtn) {
+        tabBtn.innerHTML = `🤝 FRIENDS${requests.length ? ` <span class="sb-tab-badge">${requests.length}</span>` : ''}`;
       }
-      const disabledAttr = inActiveGame ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : '';
-      friList.innerHTML = list.map(f => {
-        const name    = f.userInfo?.firstName || 'Friend';
-        const initial = name[0].toUpperCase();
-        return `
-          <div class="sb-req-item">
-            <div class="sb-req-avatar">${initial}</div>
-            <div class="sb-req-info">
-              <div class="sb-req-name">${escapeHtml(name)}</div>
-            </div>
-            <button class="sb-accept-btn" onclick="challengeFriend('${f.friendId}',5)" ${disabledAttr}>5m</button>
-            <button class="sb-accept-btn" onclick="challengeFriend('${f.friendId}',10)" ${disabledAttr}>10m</button>
-          </div>`;
-      }).join('');
+
+      // Queue a popup for any request we haven't already shown this session
+      requests.forEach(r => {
+        if (!notifiedFriendRequestIds.has(r.fromUserId) && !friendPopupQueue.some(q => q.fromUserId === r.fromUserId)) {
+          friendPopupQueue.push(r);
+        }
+      });
+      maybeShowNextFriendPopup();
+
+      const reqList = document.getElementById('sb-friend-requests-list');
+      if (reqList) {
+        reqList.innerHTML = requests.length === 0
+          ? `<div class="sb-req-empty">No pending requests.</div>`
+          : requests.map(r => {
+              const name    = r.userInfo?.firstName || 'Player';
+              const initial = name[0].toUpperCase();
+              return `
+                <div class="sb-req-item">
+                  <div class="sb-req-avatar">${initial}</div>
+                  <div class="sb-req-info">
+                    <div class="sb-req-name">${escapeHtml(name)}</div>
+                    <div class="sb-req-meta">wants to be friends</div>
+                  </div>
+                  <button class="sb-accept-btn" onclick="acceptFriendRequest('${r.fromUserId}')">ACCEPT</button>
+                  <button class="sb-decline-btn" onclick="declineFriendRequest('${r.fromUserId}')">✕</button>
+                </div>`;
+            }).join('');
+      }
+
+      const friList = document.getElementById('sb-friends-list');
+      if (friList) {
+        const list = friData.friends || [];
+        if (list.length === 0) {
+          friList.innerHTML = `<div class="sb-req-empty">No friends yet.<br>Tap "Add a Friend" to invite someone.</div>`;
+        } else {
+          const disabledAttr = inActiveGame ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : '';
+          friList.innerHTML = list.map(f => {
+            const name    = f.userInfo?.firstName || 'Friend';
+            const initial = name[0].toUpperCase();
+            return `
+              <div class="sb-req-item">
+                <div class="sb-req-avatar">${initial}</div>
+                <div class="sb-req-info">
+                  <div class="sb-req-name">${escapeHtml(name)}</div>
+                </div>
+                <button class="sb-accept-btn" onclick="challengeFriend('${f.friendId}',5)" ${disabledAttr}>5m</button>
+                <button class="sb-accept-btn" onclick="challengeFriend('${f.friendId}',10)" ${disabledAttr}>10m</button>
+              </div>`;
+          }).join('');
+        }
+      }
+
+      const sugList = document.getElementById('sb-friend-suggestions-list');
+      if (sugList) {
+        const suggestions = sugData.suggestions || [];
+        if (suggestions.length === 0) {
+          sugList.innerHTML = `<div class="sb-req-empty">Play a few games and we'll suggest people here.</div>`;
+        } else {
+          sugList.innerHTML = suggestions.map(s => {
+            const name    = s.userInfo?.firstName || 'Player';
+            const initial = name[0].toUpperCase();
+            const btn     = s.requestSent
+              ? `<button class="sb-accept-btn" disabled style="opacity:0.4;cursor:not-allowed;">SENT</button>`
+              : `<button class="sb-accept-btn" onclick="sendFriendRequestTo('${s.userId}', this)">ADD</button>`;
+            return `
+              <div class="sb-req-item">
+                <div class="sb-req-avatar">${initial}</div>
+                <div class="sb-req-info">
+                  <div class="sb-req-name">${escapeHtml(name)}</div>
+                  <div class="sb-req-meta">played before</div>
+                </div>
+                ${btn}
+              </div>`;
+          }).join('');
+        }
+      }
+    } catch(e) { /* silent — this poll runs constantly in the background */ }
+  }
+
+  async function sendFriendRequestTo(targetUserId, btnEl) {
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '...'; }
+    try {
+      await fetch('/api/friend-request/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo, targetUserId })
+      });
+      loadFriendsSection();
     } catch(e) {
-      friList.innerHTML = `<div class="sb-req-empty">Could not load friends.</div>`;
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'ADD'; }
     }
+  }
+  window.sendFriendRequestTo = sendFriendRequestTo;
+
+  // ---- Friend-request popup (shows even mid-game) ----
+  function maybeShowNextFriendPopup() {
+    if (friendPopupShowing || friendPopupQueue.length === 0) return;
+    const req = friendPopupQueue.shift();
+    notifiedFriendRequestIds.add(req.fromUserId);
+    friendPopupShowing = true;
+
+    const modal = document.getElementById('friend-request-modal');
+    document.getElementById('friend-request-name').textContent = req.userInfo?.firstName || 'Someone';
+    modal.style.display = 'flex';
+
+    document.getElementById('friend-request-accept-btn').onclick = async () => {
+      modal.style.display = 'none';
+      friendPopupShowing = false;
+      await acceptFriendRequest(req.fromUserId);
+      maybeShowNextFriendPopup();
+    };
+    document.getElementById('friend-request-reject-btn').onclick = async () => {
+      modal.style.display = 'none';
+      friendPopupShowing = false;
+      await declineFriendRequest(req.fromUserId);
+      maybeShowNextFriendPopup();
+    };
   }
 
   async function acceptFriendRequest(requesterId) {
@@ -3208,6 +3447,7 @@
       enterLobby();
     }
     startRequesterPoll(); // always poll in background for play-request accept
+    startFriendsPoll();   // always poll in background so friend-request popups can appear mid-game too
   })();
 </script>
 </body>
