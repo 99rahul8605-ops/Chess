@@ -951,6 +951,13 @@
       flex-shrink: 0; transition: background 0.15s;
     }
     .sb-accept-btn:hover { background: rgba(100,176,80,0.3); }
+    .sb-decline-btn {
+      padding: 5px 9px; border-radius: 6px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 0.58rem;
+      background: rgba(200,40,40,0.12); border: 1px solid #a04040; color: #e0a0a0;
+      flex-shrink: 0; transition: background 0.15s; margin-left: 4px;
+    }
+    .sb-decline-btn:hover { background: rgba(200,40,40,0.25); }
     .sb-req-empty { text-align: center; color: rgba(201,168,76,0.4); font-size: 0.65rem; letter-spacing: 1.5px; padding: 14px 0; }
     .sb-my-request-banner {
       background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25);
@@ -1169,6 +1176,19 @@
         </div>
         <div id="sb-req-banner" class="sb-my-request-banner" style="display:none;margin-top:8px;"></div>
         <div class="sb-req-list" id="sb-req-list"></div>
+      </div>
+    </div>
+
+    <!-- DIVIDER: FRIENDS -->
+    <div class="sb-divider-label" onclick="toggleSbSection('friends')" style="cursor:pointer;">
+      🤝 FRIENDS <span class="sb-arrow" id="arrow-friends">▼</span>
+      <button class="sb-inline-refresh" onclick="event.stopPropagation();loadFriendsSection()">↻</button>
+    </div>
+    <div class="sb-collapsible" id="sec-friends" style="display:none;">
+      <div style="padding:0 14px 20px;">
+        <button class="sb-send-btn" id="sb-add-friend-btn" onclick="shareFriendLink()" style="margin-bottom:10px;">➤ ADD A FRIEND</button>
+        <div id="sb-friend-requests-list"></div>
+        <div id="sb-friends-list"></div>
       </div>
     </div>
 
@@ -2691,9 +2711,11 @@
       if (name === 'requests') { loadSbRequests(); startRequestPoll(); }
       if (name === 'public')   { loadPublicGames(); startPublicPoll(); }
       if (name === 'current')  { loadSbCurrentGame(); }
+      if (name === 'friends')  { loadFriendsSection(); startFriendsPoll(); }
     } else {
       if (name === 'requests') stopRequestPoll();
       if (name === 'public')   stopPublicPoll();
+      if (name === 'friends')  stopFriendsPoll();
     }
   }
 
@@ -2950,6 +2972,130 @@
     requesterPollInterval = null;
   }
 
+  // ---- Friends ----
+  async function loadFriendsSection() {
+    const reqList  = document.getElementById('sb-friend-requests-list');
+    const friList  = document.getElementById('sb-friends-list');
+    if (!reqList || !friList) return;
+
+    const inActiveGame = !!(gameId && !waitingForOpponent && !gameOver);
+
+    try {
+      const [reqRes, friRes] = await Promise.all([
+        fetch(`/api/friend-requests/${userId}`),
+        fetch(`/api/friends/${userId}`)
+      ]);
+      const reqData = await reqRes.json();
+      const friData = await friRes.json();
+
+      const requests = reqData.requests || [];
+      reqList.innerHTML = requests.length === 0 ? '' : requests.map(r => {
+        const name    = r.userInfo?.firstName || 'Player';
+        const initial = name[0].toUpperCase();
+        return `
+          <div class="sb-req-item">
+            <div class="sb-req-avatar">${initial}</div>
+            <div class="sb-req-info">
+              <div class="sb-req-name">${escapeHtml(name)}</div>
+              <div class="sb-req-meta">wants to be friends</div>
+            </div>
+            <button class="sb-accept-btn" onclick="acceptFriendRequest('${r.fromUserId}')">ACCEPT</button>
+            <button class="sb-decline-btn" onclick="declineFriendRequest('${r.fromUserId}')">✕</button>
+          </div>`;
+      }).join('');
+
+      const list = friData.friends || [];
+      if (list.length === 0) {
+        friList.innerHTML = `<div class="sb-req-empty">No friends yet.<br>Tap "Add a Friend" to invite someone.</div>`;
+        return;
+      }
+      const disabledAttr = inActiveGame ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : '';
+      friList.innerHTML = list.map(f => {
+        const name    = f.userInfo?.firstName || 'Friend';
+        const initial = name[0].toUpperCase();
+        return `
+          <div class="sb-req-item">
+            <div class="sb-req-avatar">${initial}</div>
+            <div class="sb-req-info">
+              <div class="sb-req-name">${escapeHtml(name)}</div>
+            </div>
+            <button class="sb-accept-btn" onclick="challengeFriend('${f.friendId}',5)" ${disabledAttr}>5m</button>
+            <button class="sb-accept-btn" onclick="challengeFriend('${f.friendId}',10)" ${disabledAttr}>10m</button>
+          </div>`;
+      }).join('');
+    } catch(e) {
+      friList.innerHTML = `<div class="sb-req-empty">Could not load friends.</div>`;
+    }
+  }
+
+  async function acceptFriendRequest(requesterId) {
+    try {
+      await fetch('/api/friend-request/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, requesterId, userInfo })
+      });
+      loadFriendsSection();
+    } catch(e) { alert('Could not accept friend request.'); }
+  }
+  window.acceptFriendRequest = acceptFriendRequest;
+
+  async function declineFriendRequest(requesterId) {
+    try {
+      await fetch('/api/friend-request/decline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, requesterId })
+      });
+      loadFriendsSection();
+    } catch(e) {}
+  }
+  window.declineFriendRequest = declineFriendRequest;
+
+  async function challengeFriend(friendId, tc) {
+    try {
+      const res  = await fetch('/api/friend-challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo, friendId, timeControl: tc })
+      });
+      const data = await res.json();
+      if (data.gameId) {
+        closeSidebar();
+        window.location.replace(`/join/${data.gameId}`);
+      } else {
+        alert(data.error || 'Could not send challenge.');
+      }
+    } catch(e) { alert('Could not send challenge. Try again.'); }
+  }
+  window.challengeFriend = challengeFriend;
+
+  async function shareFriendLink() {
+    try {
+      const res  = await fetch('/api/bot-username');
+      const data = await res.json();
+      if (!data.username) { alert('Could not build friend link right now.'); return; }
+      const link = `https://t.me/${data.username}?start=friend_${userId}`;
+      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Add me as a friend on Chess! ♟️')}`;
+      if (tg && typeof tg.openTelegramLink === 'function') {
+        tg.openTelegramLink(shareUrl);
+      } else {
+        window.open(shareUrl, '_blank');
+      }
+    } catch(e) { alert('Could not build friend link right now.'); }
+  }
+  window.shareFriendLink = shareFriendLink;
+
+  let friendsPollInterval = null;
+  function startFriendsPoll() {
+    if (friendsPollInterval) return;
+    friendsPollInterval = setInterval(loadFriendsSection, 5000);
+  }
+  function stopFriendsPoll() {
+    clearInterval(friendsPollInterval);
+    friendsPollInterval = null;
+  }
+
   // ---- Public Games ----
   async function loadPublicGames() {
     const list = document.getElementById('sb-public-list');
@@ -3037,7 +3183,7 @@
     document.body.classList.add('lobby-mode');
 
     // Expand all lobby sections by default so options are visible immediately.
-    ['current', 'requests', 'public'].forEach(name => {
+    ['current', 'requests', 'friends', 'public'].forEach(name => {
       const sec   = document.getElementById('sec-' + name);
       const arrow = document.getElementById('arrow-' + name);
       if (sec)   sec.style.display = 'block';
@@ -3048,6 +3194,8 @@
     loadSbCurrentGame();
     loadSbRequests();
     startRequestPoll();
+    loadFriendsSection();
+    startFriendsPoll();
     loadPublicGames();
     startPublicPoll();
   }
