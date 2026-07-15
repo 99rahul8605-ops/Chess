@@ -993,21 +993,23 @@
     #exit-btn {
       display: none;
       flex-shrink: 0;
-      width: 54px; height: 54px;
-      border-radius: 50%;
+      padding: 0 16px;
+      height: 40px;
+      border-radius: 20px;
       align-items: center; justify-content: center;
       background: rgba(30,19,10,0.85);
       border: 1.5px solid rgba(255,110,110,0.55);
       color: #ff9d9d;
-      font-size: 1.3rem;
+      font-size: 0.7rem;
+      letter-spacing: 1.5px;
+      font-weight: bold;
       cursor: pointer;
       z-index: 300;
       box-shadow: 0 2px 12px rgba(0,0,0,0.6);
       transition: transform 0.15s, background 0.2s;
       font-family: Georgia, serif;
-      padding: 0;
     }
-    #exit-btn:active { transform: scale(0.9); }
+    #exit-btn:active { transform: scale(0.94); }
     #exit-btn:hover { background: rgba(180,40,40,0.28); }
 
     /* ========== LOBBY QUICK MATCH CTA (lobby mode only) ========== */
@@ -1192,7 +1194,7 @@
       👁️ <span id="spec-count">0</span>
     </div>
   </div>
-  <button id="exit-btn" onclick="exitSpectate()" title="Exit to Lobby">🚪</button>
+  <button id="exit-btn" onclick="exitSpectate()" title="Exit to Lobby">EXIT</button>
 </div>
 
 <!-- TOP: Opponent's row (North) -->
@@ -2980,23 +2982,37 @@
   }
 
   // ---- Exit Button (players + spectators) ----
-  window.exitSpectate = async function() {
+  window.exitSpectate = function() {
     const isActivePlayer = (myColor === 'white' || myColor === 'black') &&
                             gameId && !waitingForOpponent && !gameOver;
 
-    if (isActivePlayer) {
-      if (!confirm('Exiting now will end the game — you will be marked as defeated. Continue?')) return;
-      try {
-        await fetch(`/api/game/${gameId}/resign`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, reason: 'exit' })
-        });
-      } catch (e) {}
-    }
+    const goHome = () => { window.location.href = '/'; };
 
-    // Full navigation — browser tears down all timers/polling automatically.
-    window.location.href = '/';
+    const doExit = async () => {
+      if (isActivePlayer) {
+        try {
+          await Promise.race([
+            fetch(`/api/game/${gameId}/resign`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, reason: 'exit' })
+            }),
+            new Promise(resolve => setTimeout(resolve, 2500)) // never let a slow/stuck request block navigation
+          ]);
+        } catch (e) {}
+      }
+      goHome();
+    };
+
+    if (!isActivePlayer) { doExit(); return; }
+
+    const msg = 'Exiting now will end the game — you will be marked as defeated. Continue?';
+    // Telegram's WebView can be unreliable with native confirm(); use Telegram's own popup when available.
+    if (tg && typeof tg.showConfirm === 'function') {
+      tg.showConfirm(msg, (confirmed) => { if (confirmed) doExit(); });
+    } else {
+      if (confirm(msg)) doExit();
+    }
   };
 
   // ---- Lobby (landing screen shown when no game is specified) ----
