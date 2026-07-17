@@ -278,8 +278,10 @@
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(30,19,10,0.85);
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 18px;
       backdrop-filter: blur(4px);
       z-index: 10;
       border-radius: inherit;
@@ -289,6 +291,24 @@
       font-size: 1.2rem;
       letter-spacing: 3px;
       color: #c9a84c;
+      padding: 0 20px;
+    }
+    .waiting-timer-ring {
+      position: relative;
+      width: 60px; height: 60px;
+    }
+    .waiting-timer-ring svg { width: 60px; height: 60px; transform: rotate(-90deg); }
+    .waiting-ring-track {
+      fill: none; stroke: rgba(201,168,76,0.15); stroke-width: 4;
+    }
+    .waiting-ring-progress {
+      fill: none; stroke: #c9a84c; stroke-width: 4; stroke-linecap: round;
+      stroke-dasharray: 163.36; stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear;
+    }
+    .waiting-timer-num {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      font-size: 1rem; font-weight: bold; color: #f0dfa0;
     }
 
     /* Game Status Bar */
@@ -1329,7 +1349,14 @@
 <div id="board-wrap">
   <div id="board">Loading game...</div>
   <div id="waiting-overlay" style="display: none;">
-    <div class="waiting-message">⏳ WAITING FOR OPPONENT...</div>
+    <div class="waiting-message" id="waiting-message-text">⏳ WAITING FOR OPPONENT...</div>
+    <div class="waiting-timer-ring">
+      <svg viewBox="0 0 60 60">
+        <circle class="waiting-ring-track" cx="30" cy="30" r="26"/>
+        <circle class="waiting-ring-progress" id="waiting-ring-progress" cx="30" cy="30" r="26"/>
+      </svg>
+      <span class="waiting-timer-num" id="waiting-timer-num">30</span>
+    </div>
   </div>
   <div id="gameover-overlay">
     <div id="go-emoji">♟️</div>
@@ -2237,7 +2264,7 @@
       gameOver = data.isGameOver || false;
       syncTimeFromServer(data);
       updatePlayerDisplays(data);
-      toggleWaitingOverlay(waitingForOpponent);
+      toggleWaitingOverlay(waitingForOpponent, data.pendingOpponentName);
       renderBoard();
       updateStatus(data);
       startPolling();
@@ -2247,8 +2274,39 @@
     }
   }
 
-  function toggleWaitingOverlay(isWaiting) {
+  function toggleWaitingOverlay(isWaiting, opponentName) {
     waitingOverlay.style.display = isWaiting ? 'flex' : 'none';
+    const msgEl = document.getElementById('waiting-message-text');
+    if (isWaiting) {
+      if (msgEl) msgEl.textContent = opponentName ? `⏳ WAITING FOR ${opponentName.toUpperCase()} TO JOIN...` : '⏳ WAITING FOR OPPONENT...';
+      startWaitingCountdown();
+    } else {
+      stopWaitingCountdown();
+    }
+  }
+
+  let waitingCountdownInterval = null;
+  function startWaitingCountdown() {
+    if (waitingCountdownInterval) return;
+    const ringEl = document.getElementById('waiting-ring-progress');
+    const numEl  = document.getElementById('waiting-timer-num');
+    if (!ringEl || !numEl) return;
+    const CIRC = 163.36;
+    let secondsLeft = 30;
+    const render = () => {
+      numEl.textContent = secondsLeft;
+      ringEl.style.strokeDashoffset = CIRC * (1 - secondsLeft / 30);
+    };
+    render();
+    waitingCountdownInterval = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft < 0) secondsLeft = 30; // loop — we don't cancel the challenge, just keep the visual going
+      render();
+    }, 1000);
+  }
+  function stopWaitingCountdown() {
+    clearInterval(waitingCountdownInterval);
+    waitingCountdownInterval = null;
   }
 
   async function fetchGameState() {
@@ -2290,7 +2348,7 @@
       updateStatus(data);
 
       if (wasWaiting !== waitingForOpponent) {
-        toggleWaitingOverlay(waitingForOpponent);
+        toggleWaitingOverlay(waitingForOpponent, data.pendingOpponentName);
         if (!waitingForOpponent) {
           updatePlayerDisplays(data);
           renderBoard();
