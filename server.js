@@ -1279,13 +1279,13 @@ app.post('/api/friend-request/send', (req, res) => {
   friendRequests.get(tid).set(uid, { userInfo: userInfo || { firstName: 'Player' }, createdAt: Date.now() });
 
   // Best-effort bot DM so they get notified even if they don't have the app open
-  const theirChatId = userChatIds.get(tid);
+  const theirChatId = userChatIds.get(tid) || tid;
   if (theirChatId) {
     bot.telegram.sendMessage(
       theirChatId,
       `🤝 *${(userInfo && userInfo.firstName) || 'Someone'}* sent you a friend request!\n\nOpen the app to accept.`,
       { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '♟️ Open Chess', web_app: { url: `${BASE_URL}/` } }]] } }
-    ).catch(() => {});
+    ).catch(err => console.warn('Could not DM friend-request recipient:', err.message));
   }
 
   res.json({ success: true });
@@ -1394,6 +1394,20 @@ app.delete('/api/friends/:userId/:friendId', (req, res) => {
 
 // POST /api/friend-challenge — { userId, userInfo, friendId, timeControl }
 // Creates a game between the two friends and notifies the friend both in-app and via a bot DM.
+// Is this user currently seated as an active PLAYER (not spectator) in an unfinished game?
+function isUserInActiveGame(uid) {
+  for (const game of games.values()) {
+    const color = game.assignedPlayers.get(uid);
+    if (color !== 'white' && color !== 'black') continue;
+    if (!(game.whiteUserId && game.blackUserId)) continue; // not actually started yet
+    const over = game.gameOverByTime || chessCompat(game.chess).isGameOver();
+    if (!over) return true;
+  }
+  return false;
+}
+
+// POST /api/friend-challenge — sends a challenge notification only; no game is created
+// until the friend explicitly accepts (see /api/friend-challenge/accept below).
 app.post('/api/friend-challenge', async (req, res) => {
   const { userId, userInfo, friendId, timeControl } = req.body;
   if (!userId || !friendId) return res.status(400).json({ error: 'userId and friendId required' });
@@ -1403,45 +1417,116 @@ app.post('/api/friend-challenge', async (req, res) => {
     return res.status(403).json({ error: 'You can only challenge a friend' });
   }
 
-  const tc = (timeControl === 5 || timeControl === '5') ? TIME_5_MIN : DEFAULT_TIME_SEC;
+  const myInfo = userInfo || { firstName: 'Player' };
+  const tc = (timeControl === 5 || timeControl === '5') ? 5 : 10;
+
+  if (!friendChallenges.has(fid)) friendChallenges.set(fid, new Map());
+  friendChallenges.get(fid).set(uid, { userInfo: myInfo, timeControl: tc, createdAt: Date.now() });
+
+  // Best-effort bot DM — opens the app, where the Accept/Decline prompt itself appears
+  const friendChatId = userChatIds.get(fid) || fid;
+  try {
+    await bot.telegram.sendMessage(
+      friendChatId,
+      `⚔️ *${myInfo.firstName}* challenged you to a game! (${tc} min)\n\nOpen the app to accept or decline.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [[{ text: '♟️ Open Chess', web_app: { url: `${BASE_URL}/` } }]] }
+      }
+    );
+  } catch (err) {
+    console.warn('Could not DM challenged friend:', err.message);
+  }
+
+  res.json({ success: true });
+});
+
+// GET /api/friend-challenges/:userId — incoming pending challenges for this user
+app.get('/api/friend-challenges/:userId', (req, res) => {
+  const uid = String(req.params.userId);
+  const now = Date.now();
+  const incoming = friendChallenges.get(uid);
+  if (!incoming) return res.json({ challenges: [] });
+
+  const challenges = [];
+  for (const [fromUserId, entry] of incoming.entries()) {
+    if (now - entry.createdAt >= FRIEND_CHALLENGE_TTL) { incoming.delete(fromUserId); continue; }
+    challenges.push({ fromUserId, userInfo: entry.userInfo, timeControl: entry.timeControl, createdAt: entry.createdAt });
+  }
+  res.json({ challenges });
+});
+
+// POST /api/friend-challenge/accept — { userId, userInfo, challengerId }
+app.post('/api/friend-challenge/accept', (req, res) => {
+  const { userId, userInfo, challengerId } = req.body;
+  if (!userId || !challengerId) return res.status(400).json({ error: 'userId and challengerId required' });
+  const uid = String(userId), cid = String(challengerId);
+
+  const incoming = friendChallenges.get(uid);
+  const entry = incoming?.get(cid);
+  if (!entry) return res.status(404).json({ error: 'Challenge not found or expired' });
+
+  // Actively playing (not just spectating) elsewhere → block accept
+  if (isUserInActiveGame(uid)) {
+    return res.status(409).json({ error: "You're already in a game — finish it before accepting a new challenge." });
+  }
+
+  incoming.delete(cid);
+
+  const tc = entry.timeControl === 5 ? TIME_5_MIN : DEFAULT_TIME_SEC;
   const gameId = createNewGame(tc);
   const game = games.get(gameId);
 
-  const myInfo = userInfo || { firstName: 'Player' };
-  const friendInfo = friends.get(uid).get(fid) || { firstName: 'Friend' };
+  const accepterColor   = Math.random() < 0.5 ? 'white' : 'black';
+  const challengerColor = accepterColor === 'white' ? 'black' : 'white';
 
-  // Seat the challenger now; leave the friend's slot pending until they actually open the
-  // match (mirrors the normal invite-link "1st player joined" flow, so the existing
-  // waiting-for-opponent UI/timer applies here too instead of starting the game instantly).
-  const challengerColor = Math.random() < 0.5 ? 'white' : 'black';
-  game.assignedPlayers.set(uid, challengerColor);
-  game.pendingPlayers = [uid];
-  game.pendingPlayerInfos = { [uid]: myInfo, [fid]: friendInfo };
+  const myInfo = userInfo || { firstName: 'Player' };
+  const challengerInfo = entry.userInfo;
+
+  game.assignedPlayers.set(uid, accepterColor);
+  game.assignedPlayers.set(cid, challengerColor);
+  game.whiteUserId = accepterColor === 'white' ? uid : cid;
+  game.blackUserId = accepterColor === 'black' ? uid : cid;
+  game.whitePlayerInfo = game.whiteUserId === uid ? myInfo : challengerInfo;
+  game.blackPlayerInfo = game.blackUserId === uid ? myInfo : challengerInfo;
+  game.pendingPlayerInfos = { [uid]: myInfo, [cid]: challengerInfo };
+  game.lastMoveTimestamp = Date.now();
 
   activeViewers.get(gameId).set(uid, { lastSeen: Date.now(), userInfo: myInfo });
+  activeViewers.get(gameId).set(cid, { lastSeen: Date.now(), userInfo: challengerInfo });
 
-  // Auto-redirect the friend's app if they already have it open somewhere
-  pendingGameNotifications.set(fid, gameId);
-
-  // Also DM them directly in the bot with an inline button that opens the match
-  const friendChatId = userChatIds.get(fid);
-  if (friendChatId) {
-    const webAppUrl = getGameUrl(gameId);
-    try {
-      await bot.telegram.sendMessage(
-        friendChatId,
-        `⚔️ *${myInfo.firstName}* challenged you to a game! (${timeControl === 5 ? '5' : '10'} min)`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: { inline_keyboard: [[{ text: '♟️ Accept & Play', web_app: { url: webAppUrl } }]] }
-        }
-      );
-    } catch (err) {
-      console.warn('Could not DM challenged friend:', err.message);
-    }
-  }
+  // Wake up the challenger (who's been waiting) so their client auto-redirects in
+  pendingGameNotifications.set(cid, gameId);
 
   res.json({ success: true, gameId });
+});
+
+// POST /api/friend-challenge/decline — { userId, challengerId }
+app.post('/api/friend-challenge/decline', (req, res) => {
+  const { userId, userInfo, challengerId } = req.body;
+  if (!userId || !challengerId) return res.status(400).json({ error: 'userId and challengerId required' });
+  const uid = String(userId), cid = String(challengerId);
+
+  const incoming = friendChallenges.get(uid);
+  const entry = incoming?.get(cid);
+  incoming?.delete(cid);
+
+  if (entry) {
+    const declinerName = userInfo?.firstName || friends.get(cid)?.get(uid)?.firstName || 'Your friend';
+    challengeDeclines.set(cid, { friendName: declinerName, declinedAt: Date.now() });
+  }
+  res.json({ success: true });
+});
+
+// GET /api/friend-challenge/declined/:userId — one-shot: did my pending challenge get declined?
+app.get('/api/friend-challenge/declined/:userId', (req, res) => {
+  const uid = String(req.params.userId);
+  if (challengeDeclines.has(uid)) {
+    const info = challengeDeclines.get(uid);
+    challengeDeclines.delete(uid);
+    return res.json({ declined: true, friendName: info.friendName });
+  }
+  res.json({ declined: false });
 });
 
 // ========== CLEANUP ==========
@@ -1470,6 +1555,14 @@ setInterval(() => {
     if (incoming.size === 0) friendRequests.delete(toUserId);
   }
 
+  // Cleanup stale friend challenges
+  for (const [toUserId, incoming] of friendChallenges.entries()) {
+    for (const [fromUserId, entry] of incoming.entries()) {
+      if (now - entry.createdAt >= FRIEND_CHALLENGE_TTL) incoming.delete(fromUserId);
+    }
+    if (incoming.size === 0) friendChallenges.delete(toUserId);
+  }
+
   for (const [gameId, viewers] of activeViewers.entries()) {
     for (const [userId, data] of viewers.entries()) {
       if (now - data.lastSeen > 30000) {
@@ -1495,7 +1588,10 @@ const userChatIds    = new Map(); // userId(string) -> private chatId, so we can
 const friends        = new Map(); // userId(string) -> Map<friendId string, friendUserInfo>  (stored both directions)
 const friendRequests = new Map(); // targetUserId(string) -> Map<fromUserId string, { userInfo, createdAt }>
 const recentOpponents = new Map(); // userId(string) -> Map<opponentId string, { userInfo, lastPlayedAt }>  (mutual, powers "suggested friends")
+const friendChallenges = new Map(); // targetUserId(string) -> Map<fromUserId string, { userInfo, timeControl, createdAt }>  (pending, needs explicit accept)
+const challengeDeclines = new Map(); // challengerId(string) -> { friendName, declinedAt }  (one-shot, so the challenger's waiting UI can react)
 const FRIEND_REQUEST_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const FRIEND_CHALLENGE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Remember each user's private chatId whenever they message the bot directly,
 // so we can send them challenge/friend-request notifications later.
@@ -1683,7 +1779,7 @@ bot.start(async (ctx) => {
     await ctx.reply(`🤝 Friend request sent! They'll see it next time they open the app.`);
 
     // Notify the link owner right away if we know their chat
-    const ownerChatId = userChatIds.get(fromUserId);
+    const ownerChatId = userChatIds.get(fromUserId) || fromUserId;
     if (ownerChatId) {
       try {
         await bot.telegram.sendMessage(
