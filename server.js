@@ -630,12 +630,22 @@ function buildStateResponse(game, gameId) {
     (game.whiteUserId && viewers.has(game.whiteUserId) ? 1 : 0) -
     (game.blackUserId && viewers.has(game.blackUserId) ? 1 : 0));
 
+  // If exactly one player has joined so far and we already know who we're waiting on
+  // (e.g. a friend challenge), surface their name so the waiting screen can say who for.
+  let pendingOpponentName = null;
+  if (!(game.whiteUserId && game.blackUserId) && game.pendingPlayers.length === 1 && game.pendingPlayerInfos) {
+    const joinedId = game.pendingPlayers[0];
+    const otherId = Object.keys(game.pendingPlayerInfos).find(id => id !== joinedId);
+    if (otherId) pendingOpponentName = game.pendingPlayerInfos[otherId]?.firstName || null;
+  }
+
   return {
     fen: c.fen(),
     turn,
     lastMove: game.lastMove,
     waitingForOpponent: !(game.whiteUserId && game.blackUserId),
     waitingForAssignment: game.pendingPlayers.length > 0,
+    pendingOpponentName,
     isGameOver: gameOver,
     isCheckmate: checkmate,
     isStalemate: stalemate,
@@ -1397,23 +1407,18 @@ app.post('/api/friend-challenge', async (req, res) => {
   const gameId = createNewGame(tc);
   const game = games.get(gameId);
 
-  const challengerColor = Math.random() < 0.5 ? 'white' : 'black';
-  const friendColor = challengerColor === 'white' ? 'black' : 'white';
-
   const myInfo = userInfo || { firstName: 'Player' };
   const friendInfo = friends.get(uid).get(fid) || { firstName: 'Friend' };
 
+  // Seat the challenger now; leave the friend's slot pending until they actually open the
+  // match (mirrors the normal invite-link "1st player joined" flow, so the existing
+  // waiting-for-opponent UI/timer applies here too instead of starting the game instantly).
+  const challengerColor = Math.random() < 0.5 ? 'white' : 'black';
   game.assignedPlayers.set(uid, challengerColor);
-  game.assignedPlayers.set(fid, friendColor);
-  game.whiteUserId = challengerColor === 'white' ? uid : fid;
-  game.blackUserId = challengerColor === 'black' ? uid : fid;
-  game.whitePlayerInfo = game.whiteUserId === uid ? myInfo : friendInfo;
-  game.blackPlayerInfo = game.blackUserId === uid ? myInfo : friendInfo;
+  game.pendingPlayers = [uid];
   game.pendingPlayerInfos = { [uid]: myInfo, [fid]: friendInfo };
-  game.lastMoveTimestamp = Date.now();
 
   activeViewers.get(gameId).set(uid, { lastSeen: Date.now(), userInfo: myInfo });
-  activeViewers.get(gameId).set(fid, { lastSeen: Date.now(), userInfo: friendInfo });
 
   // Auto-redirect the friend's app if they already have it open somewhere
   pendingGameNotifications.set(fid, gameId);
