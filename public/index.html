@@ -1412,6 +1412,18 @@
   </div>
 </div>
 
+<!-- Challenge Popup (can appear even mid-game) -->
+<div id="challenge-request-modal" class="modal">
+  <div class="modal-content">
+    <h3>⚔️ Game Challenge</h3>
+    <p style="margin-bottom:16px;"><span id="challenge-request-name">Someone</span> challenged you to a <span id="challenge-request-tc">10</span> min game!</p>
+    <div style="display:flex; gap:10px;">
+      <button id="challenge-request-accept-btn" class="sb-send-btn" style="flex:1;">✓ ACCEPT</button>
+      <button id="challenge-request-reject-btn" class="sb-send-btn cancel" style="flex:1;">✕ REJECT</button>
+    </div>
+  </div>
+</div>
+
 <!-- Stats Modal -->
 <div id="stats-modal" class="modal">
   <div class="modal-content">
@@ -3183,34 +3195,54 @@
 
   // ---- Friends ----
   const notifiedFriendRequestIds = new Set(); // requests we've already popped up (avoid re-showing every poll)
-  let friendPopupQueue = [];
+  const notifiedChallengeIds     = new Set(); // challenges we've already popped up
+  let friendPopupQueue = []; // items: { type: 'request'|'challenge', fromUserId, userInfo, timeControl }
   let friendPopupShowing = false;
+  let pendingChallengeSentTo = null; // friendId we're currently waiting on a response from
 
   async function loadFriendsSection() {
     const inActiveGame = !!(gameId && !waitingForOpponent && !gameOver);
 
     try {
-      const [reqRes, friRes, sugRes] = await Promise.all([
+      const [reqRes, friRes, sugRes, chalRes, declRes] = await Promise.all([
         fetch(`/api/friend-requests/${userId}`),
         fetch(`/api/friends/${userId}`),
-        fetch(`/api/friend-suggestions/${userId}`)
+        fetch(`/api/friend-suggestions/${userId}`),
+        fetch(`/api/friend-challenges/${userId}`),
+        fetch(`/api/friend-challenge/declined/${userId}`)
       ]);
-      const reqData = await reqRes.json();
-      const friData = await friRes.json();
-      const sugData = await sugRes.json();
+      const reqData  = await reqRes.json();
+      const friData  = await friRes.json();
+      const sugData  = await sugRes.json();
+      const chalData = await chalRes.json();
+      const declData = await declRes.json();
 
-      const requests = reqData.requests || [];
-
-      // Update the FRIENDS tab badge with the pending-request count
-      const tabBtn = document.getElementById('tab-btn-friends');
-      if (tabBtn) {
-        tabBtn.innerHTML = `🤝 FRIENDS${requests.length ? ` <span class="sb-tab-badge">${requests.length}</span>` : ''}`;
+      // Someone declined a challenge we sent — surface it and reset the waiting row
+      if (declData.declined) {
+        alert(`❌ ${declData.friendName} declined your challenge.`);
+        pendingChallengeSentTo = null;
+        loadFriendsSection();
       }
 
-      // Queue a popup for any request we haven't already shown this session
+      const requests   = reqData.requests || [];
+      const challenges = chalData.challenges || [];
+
+      // Update the FRIENDS tab badge with the combined pending count
+      const tabBtn = document.getElementById('tab-btn-friends');
+      if (tabBtn) {
+        const pendingCount = requests.length + challenges.length;
+        tabBtn.innerHTML = `🤝 FRIENDS${pendingCount ? ` <span class="sb-tab-badge">${pendingCount}</span>` : ''}`;
+      }
+
+      // Queue popups for anything we haven't already shown this session
       requests.forEach(r => {
-        if (!notifiedFriendRequestIds.has(r.fromUserId) && !friendPopupQueue.some(q => q.fromUserId === r.fromUserId)) {
-          friendPopupQueue.push(r);
+        if (!notifiedFriendRequestIds.has(r.fromUserId) && !friendPopupQueue.some(q => q.type === 'request' && q.fromUserId === r.fromUserId)) {
+          friendPopupQueue.push({ type: 'request', ...r });
+        }
+      });
+      challenges.forEach(c => {
+        if (!notifiedChallengeIds.has(c.fromUserId) && !friendPopupQueue.some(q => q.type === 'challenge' && q.fromUserId === c.fromUserId)) {
+          friendPopupQueue.push({ type: 'challenge', ...c });
         }
       });
       maybeShowNextFriendPopup();
@@ -3245,6 +3277,16 @@
           friList.innerHTML = list.map(f => {
             const name    = f.userInfo?.firstName || 'Friend';
             const initial = name[0].toUpperCase();
+            if (pendingChallengeSentTo === f.friendId) {
+              return `
+                <div class="sb-req-item">
+                  <div class="sb-req-avatar">${initial}</div>
+                  <div class="sb-req-info">
+                    <div class="sb-req-name">${escapeHtml(name)}</div>
+                    <div class="sb-req-meta">⏳ waiting for response…</div>
+                  </div>
+                </div>`;
+            }
             return `
               <div class="sb-req-item">
                 <div class="sb-req-avatar">${initial}</div>
@@ -3300,27 +3342,49 @@
   }
   window.sendFriendRequestTo = sendFriendRequestTo;
 
-  // ---- Friend-request popup (shows even mid-game) ----
+  // ---- Friend-request / Challenge popups (show even mid-game) ----
   function maybeShowNextFriendPopup() {
     if (friendPopupShowing || friendPopupQueue.length === 0) return;
-    const req = friendPopupQueue.shift();
-    notifiedFriendRequestIds.add(req.fromUserId);
+    const item = friendPopupQueue.shift();
     friendPopupShowing = true;
 
+    if (item.type === 'challenge') {
+      notifiedChallengeIds.add(item.fromUserId);
+      const modal = document.getElementById('challenge-request-modal');
+      document.getElementById('challenge-request-name').textContent = item.userInfo?.firstName || 'Someone';
+      document.getElementById('challenge-request-tc').textContent = item.timeControl === 5 ? '5' : '10';
+      modal.style.display = 'flex';
+
+      document.getElementById('challenge-request-accept-btn').onclick = async () => {
+        modal.style.display = 'none';
+        friendPopupShowing = false;
+        await acceptChallenge(item.fromUserId);
+        maybeShowNextFriendPopup();
+      };
+      document.getElementById('challenge-request-reject-btn').onclick = async () => {
+        modal.style.display = 'none';
+        friendPopupShowing = false;
+        await declineChallenge(item.fromUserId);
+        maybeShowNextFriendPopup();
+      };
+      return;
+    }
+
+    notifiedFriendRequestIds.add(item.fromUserId);
     const modal = document.getElementById('friend-request-modal');
-    document.getElementById('friend-request-name').textContent = req.userInfo?.firstName || 'Someone';
+    document.getElementById('friend-request-name').textContent = item.userInfo?.firstName || 'Someone';
     modal.style.display = 'flex';
 
     document.getElementById('friend-request-accept-btn').onclick = async () => {
       modal.style.display = 'none';
       friendPopupShowing = false;
-      await acceptFriendRequest(req.fromUserId);
+      await acceptFriendRequest(item.fromUserId);
       maybeShowNextFriendPopup();
     };
     document.getElementById('friend-request-reject-btn').onclick = async () => {
       modal.style.display = 'none';
       friendPopupShowing = false;
-      await declineFriendRequest(req.fromUserId);
+      await declineFriendRequest(item.fromUserId);
       maybeShowNextFriendPopup();
     };
   }
@@ -3349,6 +3413,35 @@
   }
   window.declineFriendRequest = declineFriendRequest;
 
+  async function acceptChallenge(challengerId) {
+    try {
+      const res  = await fetch('/api/friend-challenge/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo, challengerId })
+      });
+      const data = await res.json();
+      if (data.gameId) {
+        closeSidebar();
+        window.location.replace(`/join/${data.gameId}`);
+      } else {
+        alert(data.error || 'Could not accept the challenge.');
+      }
+    } catch(e) { alert('Could not accept the challenge. Try again.'); }
+  }
+  window.acceptChallenge = acceptChallenge;
+
+  async function declineChallenge(challengerId) {
+    try {
+      await fetch('/api/friend-challenge/decline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userInfo, challengerId })
+      });
+    } catch(e) {}
+  }
+  window.declineChallenge = declineChallenge;
+
   async function challengeFriend(friendId, tc) {
     try {
       const res  = await fetch('/api/friend-challenge', {
@@ -3357,9 +3450,11 @@
         body: JSON.stringify({ userId, userInfo, friendId, timeControl: tc })
       });
       const data = await res.json();
-      if (data.gameId) {
-        closeSidebar();
-        window.location.replace(`/join/${data.gameId}`);
+      if (data.success) {
+        pendingChallengeSentTo = friendId;
+        loadFriendsSection(); // show the "waiting for response" row immediately
+        // When accepted, pendingGameNotifications fires and the existing background
+        // requester-poll (always running) will auto-redirect us into the match.
       } else {
         alert(data.error || 'Could not send challenge.');
       }
