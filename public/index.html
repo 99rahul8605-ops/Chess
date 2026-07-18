@@ -3258,6 +3258,7 @@
   let friendPopupQueue = []; // items: { type: 'request'|'challenge', fromUserId, userInfo, timeControl }
   let friendPopupShowing = false;
   let pendingChallengeSentTo = null; // friendId we're currently waiting on a response from
+  let friendsFirstLoadDone = false; // so already-pending items don't pop up every time the app is opened
 
   async function loadFriendsSection() {
     const inActiveGame = !!(gameId && !waitingForOpponent && !gameOver);
@@ -3293,18 +3294,27 @@
         tabBtn.innerHTML = `🤝 FRIENDS${pendingCount ? ` <span class="sb-tab-badge">${pendingCount}</span>` : ''}`;
       }
 
-      // Queue popups for anything we haven't already shown this session
-      requests.forEach(r => {
-        if (!notifiedFriendRequestIds.has(r.fromUserId) && !friendPopupQueue.some(q => q.type === 'request' && q.fromUserId === r.fromUserId)) {
-          friendPopupQueue.push({ type: 'request', ...r });
-        }
-      });
-      challenges.forEach(c => {
-        if (!notifiedChallengeIds.has(c.fromUserId) && !friendPopupQueue.some(q => q.type === 'challenge' && q.fromUserId === c.fromUserId)) {
-          friendPopupQueue.push({ type: 'challenge', ...c });
-        }
-      });
-      maybeShowNextFriendPopup();
+      // Popups only fire for things that show up WHILE the app is already open (e.g. a
+      // challenge sent to you mid-game). On the very first load, anything already pending
+      // is just marked as seen so it shows quietly in the list instead of interrupting —
+      // opening the app should never itself trigger a popup for old pending items.
+      if (friendsFirstLoadDone) {
+        requests.forEach(r => {
+          if (!notifiedFriendRequestIds.has(r.fromUserId) && !friendPopupQueue.some(q => q.type === 'request' && q.fromUserId === r.fromUserId)) {
+            friendPopupQueue.push({ type: 'request', ...r });
+          }
+        });
+        challenges.forEach(c => {
+          if (!notifiedChallengeIds.has(c.fromUserId) && !friendPopupQueue.some(q => q.type === 'challenge' && q.fromUserId === c.fromUserId)) {
+            friendPopupQueue.push({ type: 'challenge', ...c });
+          }
+        });
+        maybeShowNextFriendPopup();
+      } else {
+        requests.forEach(r => notifiedFriendRequestIds.add(r.fromUserId));
+        challenges.forEach(c => notifiedChallengeIds.add(c.fromUserId));
+        friendsFirstLoadDone = true;
+      }
 
       const reqList = document.getElementById('sb-friend-requests-list');
       if (reqList) {
