@@ -37,7 +37,7 @@ app.use(express.static('public'));
 
 // ========== MONGODB (OPTIONAL) ==========
 let User = null;
-let FriendEdge = null, ChatIdModel = null, OpponentEdge = null;
+let FriendEdge = null, ChatIdModel = null, OpponentEdge = null, KnownUserModel = null;
 if (mongoose && MONGO_URI) {
   mongoose.connect(MONGO_URI)
     .then(() => {
@@ -88,6 +88,14 @@ if (mongoose && MONGO_URI) {
   });
   opponentEdgeSchema.index({ userId: 1, opponentId: 1 }, { unique: true });
   OpponentEdge = mongoose.model('OpponentEdge', opponentEdgeSchema);
+
+  // Directory of everyone the bot has ever seen, so suggestions can list the whole roster
+  const knownUserSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    userInfo: mongoose.Schema.Types.Mixed,
+    updatedAt: { type: Date, default: Date.now }
+  });
+  KnownUserModel = mongoose.model('KnownUser', knownUserSchema);
 } else {
   console.log('ℹ️ MongoDB not configured – user stats will be stored in memory.');
 }
@@ -122,6 +130,27 @@ async function persistOpponentEdge(userId, opponentId, opponentInfo) {
     );
   } catch (e) { console.warn('⚠️ Could not persist recent-opponent edge:', e.message); }
 }
+async function persistKnownUser(userId, userInfo) {
+  if (!KnownUserModel) return;
+  try {
+    await KnownUserModel.findOneAndUpdate(
+      { userId },
+      { userId, userInfo, updatedAt: new Date() },
+      { upsert: true }
+    );
+  } catch (e) { /* non-critical */ }
+}
+// Remember this user (name/avatar) in the global directory used for friend suggestions.
+// Cheap in-memory write every time; only hits Mongo when the info actually changed.
+function rememberUser(userId, userInfo) {
+  if (!userId || !userInfo) return;
+  const uid = String(userId);
+  const prev = knownUsers.get(uid);
+  knownUsers.set(uid, userInfo);
+  if (!prev || prev.firstName !== userInfo.firstName || prev.photoUrl !== userInfo.photoUrl) {
+    persistKnownUser(uid, userInfo);
+  }
+}
 
 // Rebuild the in-memory friends/chatId/recentOpponents caches from MongoDB on boot,
 // so a redeploy or restart no longer wipes anyone's friends list.
@@ -147,6 +176,11 @@ async function hydrateFriendsCache() {
         recentOpponents.get(r.userId).set(r.opponentId, { userInfo: r.opponentInfo, lastPlayedAt: r.lastPlayedAt.getTime() });
       }
       console.log(`✅ Hydrated ${rows.length} recent-opponent edges from MongoDB`);
+    }
+    if (KnownUserModel) {
+      const rows = await KnownUserModel.find({});
+      for (const r of rows) knownUsers.set(r.userId, r.userInfo);
+      console.log(`✅ Hydrated ${rows.length} known users from MongoDB`);
     }
   } catch (e) {
     console.error('❌ Error hydrating friends cache from MongoDB:', e.message);
@@ -820,6 +854,7 @@ app.post('/api/game/:gameId/join', (req, res) => {
 
   const viewers = activeViewers.get(gameId);
   viewers.set(userId, { lastSeen: Date.now(), userInfo });
+  rememberUser(userId, userInfo);
 
   if (game.assignedPlayers.has(userId)) {
     return res.json({
@@ -1254,6 +1289,7 @@ app.post('/api/matchmaking/join', (req, res) => {
   const { userId, userInfo, timeControl } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
   const uid = String(userId);
+  rememberUser(uid, userInfo);
 
   // Already matched from a previous call (e.g. duplicate click)?
   if (matchResults.has(uid)) {
@@ -1351,6 +1387,7 @@ app.post('/api/friend-request/send', (req, res) => {
   const { userId, userInfo, targetUserId } = req.body;
   if (!userId || !targetUserId) return res.status(400).json({ error: 'userId and targetUserId required' });
   const uid = String(userId), tid = String(targetUserId);
+  rememberUser(uid, userInfo);
   if (uid === tid) return res.status(400).json({ error: 'Cannot friend yourself' });
   if (friends.get(uid)?.has(tid)) return res.status(400).json({ error: 'Already friends' });
 
@@ -1398,27 +1435,44 @@ app.get('/api/friend-status/:userId/:targetId', (req, res) => {
 });
 
 // GET /api/friend-suggestions/:userId — people you've played before who aren't friends yet
+// GET /api/friend-suggestions/:userId — everyone the bot knows about who isn't already
+// a friend or pending, with people you've actually played before ranked first.
 app.get('/api/friend-suggestions/:userId', (req, res) => {
   const uid = String(req.params.userId);
-  const opponents = recentOpponents.get(uid);
-  if (!opponents) return res.json({ suggestions: [] });
-
-  const myFriends           = friends.get(uid) || new Map();
-  const myIncomingRequests  = friendRequests.get(uid) || new Map();
+  const myFriends          = friends.get(uid) || new Map();
+  const myIncomingRequests = friendRequests.get(uid) || new Map();
+  const opponents          = recentOpponents.get(uid) || new Map();
 
   const suggestions = [];
-  for (const [oppId, entry] of opponents.entries()) {
-    if (myFriends.has(oppId)) continue;
-    if (myIncomingRequests.has(oppId)) continue; // already pending in the requests list, don't duplicate
+  const seen = new Set([uid]);
+
+  // Past opponents first (most relevant), newest game first
+  const oppList = [...opponents.entries()].sort((a, b) => b[1].lastPlayedAt - a[1].lastPlayedAt);
+  for (const [oppId, entry] of oppList) {
+    if (myFriends.has(oppId) || myIncomingRequests.has(oppId)) continue;
     suggestions.push({
       userId: oppId,
       userInfo: entry.userInfo,
       lastPlayedAt: entry.lastPlayedAt,
       requestSent: !!(friendRequests.get(oppId)?.has(uid))
     });
+    seen.add(oppId);
   }
-  suggestions.sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
-  res.json({ suggestions: suggestions.slice(0, 10) });
+
+  // Then everyone else the bot has ever seen
+  for (const [otherId, userInfo] of knownUsers.entries()) {
+    if (seen.has(otherId)) continue;
+    if (myFriends.has(otherId) || myIncomingRequests.has(otherId)) continue;
+    suggestions.push({
+      userId: otherId,
+      userInfo,
+      lastPlayedAt: 0,
+      requestSent: !!(friendRequests.get(otherId)?.has(uid))
+    });
+    seen.add(otherId);
+  }
+
+  res.json({ suggestions: suggestions.slice(0, 50) });
 });
 
 // GET /api/bot-username — so the client can build a shareable friend deep-link
@@ -1689,6 +1743,7 @@ const userChatIds    = new Map(); // userId(string) -> private chatId, so we can
 const friends        = new Map(); // userId(string) -> Map<friendId string, friendUserInfo>  (stored both directions)
 const friendRequests = new Map(); // targetUserId(string) -> Map<fromUserId string, { userInfo, createdAt }>
 const recentOpponents = new Map(); // userId(string) -> Map<opponentId string, { userInfo, lastPlayedAt }>  (mutual, powers "suggested friends")
+const knownUsers = new Map(); // userId(string) -> userInfo (latest seen) — directory of everyone the bot knows about, for suggestions
 const friendChallenges = new Map(); // targetUserId(string) -> Map<fromUserId string, { userInfo, timeControl, createdAt }>  (pending, needs explicit accept)
 const challengeDeclines = new Map(); // challengerId(string) -> { friendName, declinedAt }  (one-shot, so the challenger's waiting UI can react)
 const FRIEND_REQUEST_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
