@@ -37,9 +37,13 @@ app.use(express.static('public'));
 
 // ========== MONGODB (OPTIONAL) ==========
 let User = null;
+let FriendEdge = null, ChatIdModel = null, OpponentEdge = null;
 if (mongoose && MONGO_URI) {
   mongoose.connect(MONGO_URI)
-    .then(() => console.log('✅ MongoDB connected'))
+    .then(() => {
+      console.log('✅ MongoDB connected');
+      hydrateFriendsCache();
+    })
     .catch(err => console.error('❌ MongoDB connection error:', err.message));
 
   const userSchema = new mongoose.Schema({
@@ -57,8 +61,96 @@ if (mongoose && MONGO_URI) {
     updatedAt: { type: Date, default: Date.now }
   });
   User = mongoose.model('User', userSchema);
+
+  // Friends persist across redeploys/restarts (this is the actual fix for "friends disappearing")
+  const friendEdgeSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    friendId: { type: String, required: true },
+    friendInfo: mongoose.Schema.Types.Mixed,
+    createdAt: { type: Date, default: Date.now }
+  });
+  friendEdgeSchema.index({ userId: 1, friendId: 1 }, { unique: true });
+  FriendEdge = mongoose.model('FriendEdge', friendEdgeSchema);
+
+  // So we can still DM someone after a restart without needing them to /start the bot again
+  const chatIdSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    chatId: mongoose.Schema.Types.Mixed
+  });
+  ChatIdModel = mongoose.model('ChatId', chatIdSchema);
+
+  // Powers "suggested friends" (people you've played before) across restarts
+  const opponentEdgeSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    opponentId: { type: String, required: true },
+    opponentInfo: mongoose.Schema.Types.Mixed,
+    lastPlayedAt: { type: Date, default: Date.now }
+  });
+  opponentEdgeSchema.index({ userId: 1, opponentId: 1 }, { unique: true });
+  OpponentEdge = mongoose.model('OpponentEdge', opponentEdgeSchema);
 } else {
   console.log('ℹ️ MongoDB not configured – user stats will be stored in memory.');
+}
+
+// ---- Write-through persistence helpers (in-memory Maps stay the source of truth at
+// request time; Mongo is just there so the Maps can be rebuilt after a restart) ----
+async function persistFriendEdge(userId, friendId, friendInfo) {
+  if (!FriendEdge) return;
+  try {
+    await FriendEdge.findOneAndUpdate(
+      { userId, friendId },
+      { userId, friendId, friendInfo, createdAt: new Date() },
+      { upsert: true }
+    );
+  } catch (e) { console.warn('⚠️ Could not persist friend edge:', e.message); }
+}
+async function removeFriendEdge(userId, friendId) {
+  if (!FriendEdge) return;
+  try { await FriendEdge.deleteOne({ userId, friendId }); } catch (e) { console.warn('⚠️ Could not remove friend edge:', e.message); }
+}
+async function persistChatId(userId, chatId) {
+  if (!ChatIdModel) return;
+  try { await ChatIdModel.findOneAndUpdate({ userId }, { userId, chatId }, { upsert: true }); } catch (e) { /* non-critical */ }
+}
+async function persistOpponentEdge(userId, opponentId, opponentInfo) {
+  if (!OpponentEdge) return;
+  try {
+    await OpponentEdge.findOneAndUpdate(
+      { userId, opponentId },
+      { userId, opponentId, opponentInfo, lastPlayedAt: new Date() },
+      { upsert: true }
+    );
+  } catch (e) { console.warn('⚠️ Could not persist recent-opponent edge:', e.message); }
+}
+
+// Rebuild the in-memory friends/chatId/recentOpponents caches from MongoDB on boot,
+// so a redeploy or restart no longer wipes anyone's friends list.
+async function hydrateFriendsCache() {
+  try {
+    if (FriendEdge) {
+      const rows = await FriendEdge.find({});
+      for (const r of rows) {
+        if (!friends.has(r.userId)) friends.set(r.userId, new Map());
+        friends.get(r.userId).set(r.friendId, r.friendInfo);
+      }
+      console.log(`✅ Hydrated ${rows.length} friend edges from MongoDB`);
+    }
+    if (ChatIdModel) {
+      const rows = await ChatIdModel.find({});
+      for (const r of rows) userChatIds.set(r.userId, r.chatId);
+      console.log(`✅ Hydrated ${rows.length} chat IDs from MongoDB`);
+    }
+    if (OpponentEdge) {
+      const rows = await OpponentEdge.find({});
+      for (const r of rows) {
+        if (!recentOpponents.has(r.userId)) recentOpponents.set(r.userId, new Map());
+        recentOpponents.get(r.userId).set(r.opponentId, { userInfo: r.opponentInfo, lastPlayedAt: r.lastPlayedAt.getTime() });
+      }
+      console.log(`✅ Hydrated ${rows.length} recent-opponent edges from MongoDB`);
+    }
+  } catch (e) {
+    console.error('❌ Error hydrating friends cache from MongoDB:', e.message);
+  }
 }
 
 const memoryStats = new Map();
@@ -561,6 +653,8 @@ async function recordGameResult(game, explicitWinner = null) {
       if (!recentOpponents.has(blackId)) recentOpponents.set(blackId, new Map());
       recentOpponents.get(whiteId).set(blackId, { userInfo: blackInfo, lastPlayedAt: Date.now() });
       recentOpponents.get(blackId).set(whiteId, { userInfo: whiteInfo, lastPlayedAt: Date.now() });
+      persistOpponentEdge(whiteId, blackId, blackInfo);
+      persistOpponentEdge(blackId, whiteId, whiteInfo);
     }
     game.statsRecorded = true;
   }
@@ -1268,6 +1362,8 @@ app.post('/api/friend-request/send', (req, res) => {
     if (!friends.has(tid)) friends.set(tid, new Map());
     friends.get(uid).set(tid, theirRequestToMe.userInfo);
     friends.get(tid).set(uid, userInfo || { firstName: 'Player' });
+    persistFriendEdge(uid, tid, theirRequestToMe.userInfo);
+    persistFriendEdge(tid, uid, userInfo || { firstName: 'Player' });
     return res.json({ success: true, autoAccepted: true });
   }
 
@@ -1364,6 +1460,9 @@ app.post('/api/friend-request/accept', (req, res) => {
   const myInfo = req.body.userInfo || { firstName: 'Player' };
   friends.get(rid).set(uid, myInfo);
 
+  persistFriendEdge(uid, rid, entry.userInfo);
+  persistFriendEdge(rid, uid, myInfo);
+
   res.json({ success: true });
 });
 
@@ -1389,6 +1488,8 @@ app.delete('/api/friends/:userId/:friendId', (req, res) => {
   const uid = String(req.params.userId), fid = String(req.params.friendId);
   friends.get(uid)?.delete(fid);
   friends.get(fid)?.delete(uid);
+  removeFriendEdge(uid, fid);
+  removeFriendEdge(fid, uid);
   res.json({ success: true });
 });
 
@@ -1597,7 +1698,11 @@ const FRIEND_CHALLENGE_TTL = 5 * 60 * 1000; // 5 minutes
 // so we can send them challenge/friend-request notifications later.
 bot.use(async (ctx, next) => {
   if (ctx.chat?.type === 'private' && ctx.from?.id) {
-    userChatIds.set(String(ctx.from.id), ctx.chat.id);
+    const uid = String(ctx.from.id);
+    if (userChatIds.get(uid) !== ctx.chat.id) {
+      userChatIds.set(uid, ctx.chat.id);
+      persistChatId(uid, ctx.chat.id);
+    }
   }
   return next();
 });
