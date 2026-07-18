@@ -589,6 +589,28 @@
       text-align: center;
     }
     .modal-content h3 { margin-bottom: 15px; }
+    .popup-close-btn {
+      position: absolute; top: 8px; right: 8px;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(201,168,76,0.3);
+      color: rgba(201,168,76,0.7);
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0;
+    }
+    .popup-close-btn:active { transform: scale(0.9); }
+    .popup-later-text {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 0.62rem;
+      letter-spacing: 1px;
+      color: rgba(201,168,76,0.5);
+      text-decoration: underline;
+      cursor: pointer;
+    }
 
     /* Player Profile Card */
     .profile-header {
@@ -1412,25 +1434,29 @@
 
 <!-- Friend Request Popup (can appear even mid-game) -->
 <div id="friend-request-modal" class="modal">
-  <div class="modal-content">
+  <div class="modal-content" style="position:relative;">
+    <button class="popup-close-btn" id="friend-request-close-btn" title="Decide later">✕</button>
     <h3>🤝 Friend Request</h3>
     <p style="margin-bottom:16px;"><span id="friend-request-name">Someone</span> wants to be your friend!</p>
     <div style="display:flex; gap:10px;">
       <button id="friend-request-accept-btn" class="sb-send-btn" style="flex:1;">✓ ACCEPT</button>
       <button id="friend-request-reject-btn" class="sb-send-btn cancel" style="flex:1;">✕ REJECT</button>
     </div>
+    <div class="popup-later-text" id="friend-request-later-btn">Decide later</div>
   </div>
 </div>
 
 <!-- Challenge Popup (can appear even mid-game) -->
 <div id="challenge-request-modal" class="modal">
-  <div class="modal-content">
+  <div class="modal-content" style="position:relative;">
+    <button class="popup-close-btn" id="challenge-request-close-btn" title="Decide later">✕</button>
     <h3>⚔️ Game Challenge</h3>
     <p style="margin-bottom:16px;"><span id="challenge-request-name">Someone</span> challenged you to a <span id="challenge-request-tc">10</span> min game!</p>
     <div style="display:flex; gap:10px;">
       <button id="challenge-request-accept-btn" class="sb-send-btn" style="flex:1;">✓ ACCEPT</button>
       <button id="challenge-request-reject-btn" class="sb-send-btn cancel" style="flex:1;">✕ REJECT</button>
     </div>
+    <div class="popup-later-text" id="challenge-request-later-btn">Decide later</div>
   </div>
 </div>
 
@@ -3381,6 +3407,13 @@
     const item = friendPopupQueue.shift();
     friendPopupShowing = true;
 
+    const dismissOnly = (modal) => {
+      modal.style.display = 'none';
+      friendPopupShowing = false;
+      maybeShowNextFriendPopup();
+      // Left pending on purpose — it stays visible in the Friends tab list for later.
+    };
+
     if (item.type === 'challenge') {
       notifiedChallengeIds.add(item.fromUserId);
       const modal = document.getElementById('challenge-request-modal');
@@ -3400,6 +3433,8 @@
         await declineChallenge(item.fromUserId);
         maybeShowNextFriendPopup();
       };
+      document.getElementById('challenge-request-close-btn').onclick = () => dismissOnly(modal);
+      document.getElementById('challenge-request-later-btn').onclick = () => dismissOnly(modal);
       return;
     }
 
@@ -3420,6 +3455,8 @@
       await declineFriendRequest(item.fromUserId);
       maybeShowNextFriendPopup();
     };
+    document.getElementById('friend-request-close-btn').onclick = () => dismissOnly(modal);
+    document.getElementById('friend-request-later-btn').onclick = () => dismissOnly(modal);
   }
 
   async function acceptFriendRequest(requesterId) {
