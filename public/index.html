@@ -119,20 +119,25 @@
       box-shadow: 0 0 6px rgba(100,176,80,0.3);
     }
 
+    .avatar-wrap { position: relative; flex-shrink: 0; }
+
     .add-friend-icon-btn {
-      flex-shrink: 0;
-      width: 26px; height: 26px;
+      position: absolute;
+      bottom: -3px; right: -3px;
+      width: 17px; height: 17px;
       border-radius: 50%;
-      background: rgba(201,168,76,0.14);
-      border: 1px solid rgba(201,168,76,0.5);
+      background: #1e130a;
+      border: 1.5px solid #c9a84c;
       color: #c9a84c;
-      font-size: 0.85rem; font-weight: bold;
+      font-size: 0.6rem; font-weight: bold;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      padding: 0; margin: 0 2px;
+      padding: 0; margin: 0;
+      line-height: 1;
       transition: background 0.15s, transform 0.15s;
+      z-index: 2;
     }
-    .add-friend-icon-btn:active { transform: scale(0.9); }
+    .add-friend-icon-btn:active { transform: scale(0.85); }
     .add-friend-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* Clock inline */
@@ -1311,7 +1316,10 @@
 <div class="player-row" id="opponent-row">
   <div class="player-info-bar">
     <div class="player-identity" id="opponent-identity">
-      <div class="player-avatar" id="opponent-avatar">♚</div>
+      <div class="avatar-wrap">
+        <div class="player-avatar" id="opponent-avatar">♚</div>
+        <button class="add-friend-icon-btn" id="opponent-add-friend-btn" style="display:none;" onclick="event.stopPropagation();handleAddFriendClick('opponent')" title="Add Friend">+</button>
+      </div>
       <div class="player-info">
         <span class="player-name" id="opponent-name">Opponent</span>
         <span class="player-color-badge">
@@ -1320,7 +1328,6 @@
         </span>
       </div>
     </div>
-    <button class="add-friend-icon-btn" id="opponent-add-friend-btn" style="display:none;" onclick="event.stopPropagation();handleAddFriendClick()" title="Add Friend">+</button>
     <div class="clock-inline" id="opponent-clock-wrap">
       <svg class="clock-svg-ring" viewBox="0 0 36 36">
         <circle class="ring-bg-circle" cx="18" cy="18" r="16"/>
@@ -1371,7 +1378,10 @@
 <div class="player-row own-side" id="my-row">
   <div class="player-info-bar">
     <div class="player-identity" id="my-identity">
-      <div class="player-avatar" id="my-avatar">♔</div>
+      <div class="avatar-wrap">
+        <div class="player-avatar" id="my-avatar">♔</div>
+        <button class="add-friend-icon-btn" id="my-avatar-add-friend-btn" style="display:none;" onclick="event.stopPropagation();handleAddFriendClick('my')" title="Add Friend">+</button>
+      </div>
       <div class="player-info">
         <span class="player-name" id="my-name">You</span>
         <span class="player-color-badge">
@@ -2105,20 +2115,38 @@
     refreshAddFriendButton();
   }
 
-  // ---- In-game "Add Friend" icon on opponent's row ----
-  let lastFriendCheckOpponentId = null;
-  async function refreshAddFriendButton() {
-    const btn = document.getElementById('opponent-add-friend-btn');
-    if (!btn) return;
-    if (myColor !== 'white' && myColor !== 'black') { btn.style.display = 'none'; return; } // spectators: skip
+  // ---- In-game "Add Friend" icon on avatars ----
+  // For an actual player: only the opponent's avatar gets a badge (can't friend yourself).
+  // For a spectator: BOTH avatars get a badge, since neither player is "you".
+  const lastFriendCheckIds = { opponent: null, my: null };
 
-    const opponentId = myColor === 'white' ? blackUserId : whiteUserId;
-    if (!opponentId) { btn.style.display = 'none'; return; }
-    if (opponentId === lastFriendCheckOpponentId) return; // already resolved for this opponent
-    lastFriendCheckOpponentId = opponentId;
+  function targetIdFor(which) {
+    // Matches the row/color convention used elsewhere: for spectators, opponent-row = Black, my-row = White.
+    if (which === 'opponent') {
+      if (myColor === 'white') return blackUserId;
+      if (myColor === 'black') return whiteUserId;
+      return blackUserId; // spectator
+    } else {
+      if (myColor === 'white') return whiteUserId;
+      if (myColor === 'black') return blackUserId;
+      return whiteUserId; // spectator
+    }
+  }
+
+  async function refreshOneAddFriendButton(which) {
+    const btn = document.getElementById(which === 'opponent' ? 'opponent-add-friend-btn' : 'my-avatar-add-friend-btn');
+    if (!btn) return;
+
+    // Only a player themselves never gets a badge on their own avatar
+    if (which === 'my' && (myColor === 'white' || myColor === 'black')) { btn.style.display = 'none'; return; }
+
+    const targetId = targetIdFor(which);
+    if (!targetId || targetId === userId) { btn.style.display = 'none'; return; }
+    if (targetId === lastFriendCheckIds[which]) return; // already resolved for this target
+    lastFriendCheckIds[which] = targetId;
 
     try {
-      const res  = await fetch(`/api/friend-status/${userId}/${opponentId}`);
+      const res  = await fetch(`/api/friend-status/${userId}/${targetId}`);
       const data = await res.json();
       if (data.isFriend) {
         btn.style.display = 'none';
@@ -2132,20 +2160,25 @@
     } catch(e) { btn.style.display = 'none'; }
   }
 
-  async function handleAddFriendClick() {
-    const btn = document.getElementById('opponent-add-friend-btn');
-    const opponentId = myColor === 'white' ? blackUserId : whiteUserId;
-    if (!opponentId || !btn || btn.disabled) return;
+  function refreshAddFriendButton() {
+    refreshOneAddFriendButton('opponent');
+    refreshOneAddFriendButton('my');
+  }
+
+  async function handleAddFriendClick(which) {
+    const btn = document.getElementById(which === 'opponent' ? 'opponent-add-friend-btn' : 'my-avatar-add-friend-btn');
+    const targetId = targetIdFor(which);
+    if (!targetId || !btn || btn.disabled) return;
     btn.disabled = true;
-    btn.textContent = '...';
+    btn.textContent = '…';
     try {
       await fetch('/api/friend-request/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, userInfo, targetUserId: opponentId })
+        body: JSON.stringify({ userId, userInfo, targetUserId: targetId })
       });
-      lastFriendCheckOpponentId = null; // force a fresh status check
-      refreshAddFriendButton();
+      lastFriendCheckIds[which] = null; // force a fresh status check
+      refreshOneAddFriendButton(which);
     } catch(e) {
       btn.disabled = false;
       btn.textContent = '+';
