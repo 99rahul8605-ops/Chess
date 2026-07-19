@@ -1965,6 +1965,10 @@ You can also send the invitation to a group or channel. In that case, the first 
 
   const keyboard = [
     [{
+      text: '♟️ Play',
+      web_app: { url: `${BASE_URL}/` }
+    }],
+    [{
       text: '📤 Send Game Invite',
       switch_inline_query: ''
     }]
